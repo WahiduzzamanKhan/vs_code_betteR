@@ -56,8 +56,19 @@ suite('betterR debugger: browser() and breakpoints in VS Code', () => {
     let session: Session;
     let doc: vscode.TextDocument;
     let editor: vscode.TextEditor;
+    /** Bodies of every `stopped` event VS Code received from the adapter. */
+    const stops: { preserveFocusHint?: boolean }[] = [];
 
     suiteSetup(async () => {
+        vscode.debug.registerDebugAdapterTrackerFactory('ark', {
+            createDebugAdapterTracker: () => ({
+                onDidSendMessage: (m) => {
+                    if (m.type === 'event' && m.event === 'stopped') {
+                        stops.push(m.body);
+                    }
+                },
+            }),
+        });
         doc = await vscode.workspace.openTextDocument(path.join(workspace(), 'debug.R'));
         editor = await vscode.window.showTextDocument(doc);
         const ext = vscode.extensions.getExtension<BetterRApi>('betterr.betterr-vscode')!;
@@ -126,6 +137,21 @@ suite('betterR debugger: browser() and breakpoints in VS Code', () => {
         assert.match(frame!.source!.path!, /^ark:/);
         const vdoc = await vscode.workspace.openTextDocument(vscode.Uri.parse(frame!.source!.path!));
         assert.match(vdoc.getText(), /browser\(\)/);
+
+        // Stepping by typing in the console keeps the line highlighted in the
+        // editor but hands keyboard focus back to the console.
+        const terminal = session.terminal!;
+        const show = terminal.show.bind(terminal);
+        let refocused = 0;
+        terminal.show = (preserveFocus?: boolean) => {
+            refocused += preserveFocus ? 0 : 1;
+            show(preserveFocus);
+        };
+        const stackItem = vscode.debug.activeStackItem;
+        terminal.sendText('n\r', false);
+        await waitFor('frame refocused after console step', () => vscode.debug.activeStackItem, (i) => !!i && i !== stackItem);
+        await waitFor('focus handed back to the console', () => refocused, (n) => n > 0, 5_000);
+        terminal.show = show;
 
         await vscode.commands.executeCommand('workbench.action.debug.continue');
     });
