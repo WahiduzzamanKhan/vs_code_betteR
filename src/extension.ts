@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { ArkDapBridge } from './dap';
 import { Session } from './session';
 
 /** Returned from `activate`; used by the integration tests. */
@@ -7,6 +8,8 @@ export interface BetterRApi {
 }
 
 let current: Promise<Session> | undefined;
+/** The started session, for synchronous callers (debug adapter, documents). */
+let active: Session | undefined;
 
 export function activate(context: vscode.ExtensionContext): BetterRApi {
     const output = vscode.window.createOutputChannel('betterR', { log: true });
@@ -33,6 +36,7 @@ export function activate(context: vscode.ExtensionContext): BetterRApi {
         const starting = Session.start(context, output, onUnexpectedExit);
         starting.then(
             (session) => {
+                active = session;
                 setStatus('$(terminal) R', `R session (ark) — ${session.connectionFile}`);
                 if (vscode.workspace.getConfiguration('betterR').get<boolean>('openConsoleOnStart')) {
                     session.openConsole(true);
@@ -58,6 +62,7 @@ export function activate(context: vscode.ExtensionContext): BetterRApi {
         vscode.commands.registerCommand('betterR.restart', async () => {
             const old = current;
             current = undefined;
+            active = undefined;
             await (await old?.catch(() => undefined))?.dispose();
             await start();
         }),
@@ -66,14 +71,19 @@ export function activate(context: vscode.ExtensionContext): BetterRApi {
             if (!editor) {
                 return;
             }
-            const { selection, document } = editor;
-            const code = selection.isEmpty ? document.lineAt(selection.active.line).text : document.getText(selection);
-            (await session()).sendToConsole(code);
-            // Like RStudio: running a line moves the cursor to the next one.
-            if (selection.isEmpty && selection.active.line + 1 < document.lineCount) {
-                const next = new vscode.Position(selection.active.line + 1, 0);
-                editor.selection = new vscode.Selection(next, next);
-            }
+            await (await session()).runSelection(editor);
+        }),
+        vscode.debug.registerDebugAdapterDescriptorFactory('ark', {
+            createDebugAdapterDescriptor: () => {
+                const s = active;
+                if (!s?.dapPort) {
+                    throw new Error('The R console is not connected to the debugger yet.');
+                }
+                return new vscode.DebugAdapterInlineImplementation(new ArkDapBridge(s.dapPort, () => s.paused));
+            },
+        }),
+        vscode.workspace.registerTextDocumentContentProvider('ark', {
+            provideTextDocumentContent: async (uri) => (active ? active.virtualDocument(uri) : ''),
         }),
     );
 

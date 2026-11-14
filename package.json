@@ -1,7 +1,7 @@
 {
   "name": "betterr-vscode",
   "displayName": "betterR",
-  "description": "One live R session (ark) shared by the terminal console and the editor. No R packages installed into your project.",
+  "description": "One live R session (ark) shared by the terminal console, the editor and the debugger. No R packages installed into your project.",
   "version": "0.1.0",
   "publisher": "betterr",
   "license": "MIT",
@@ -61,7 +61,21 @@
           "description": "Open the R console in a terminal when the session starts."
         }
       }
-    }
+    },
+    "debuggers": [
+      {
+        "type": "ark",
+        "label": "R (ark)",
+        "languages": [
+          "r"
+        ]
+      }
+    ],
+    "breakpoints": [
+      {
+        "language": "r"
+      }
+    ]
   },
   "scripts": {
     "compile": "tsc -p .",
