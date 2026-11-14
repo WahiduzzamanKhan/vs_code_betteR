@@ -1,0 +1,82 @@
+{
+  "name": "betterr-vscode",
+  "displayName": "betterR",
+  "description": "One live R session (ark) shared by the terminal console and the editor. No R packages installed into your project.",
+  "version": "0.1.0",
+  "publisher": "betterr",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "vscode": "^1.91.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:r"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "betterR.openConsole",
+        "title": "Open R Console",
+        "category": "betterR"
+      },
+      {
+        "command": "betterR.runSelection",
+        "title": "Run Selection or Line in R Console",
+        "category": "betterR"
+      },
+      {
+        "command": "betterR.restart",
+        "title": "Restart R Session",
+        "category": "betterR"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "betterR.runSelection",
+        "key": "ctrl+enter",
+        "mac": "cmd+enter",
+        "when": "editorTextFocus && editorLangId == r"
+      }
+    ],
+    "configuration": {
+      "title": "betterR",
+      "properties": {
+        "betterR.arkPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the ark binary. Empty: $ARK_PATH, then `ark` on PATH, then the repo's development build."
+        },
+        "betterR.consolePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the betterr console binary. Empty: `betterr` on PATH, then the repo's development build."
+        },
+        "betterR.openConsoleOnStart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open the R console in a terminal when the session starts."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -p . --watch",
+    "test": "npm run compile && node ./out/test/runTest.js"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.20.5",
+    "@types/vscode": "~1.91.0",
+    "@vscode/test-electron": "^3.1.0",
+    "mocha": "^11.8.0",
+    "typescript": "^7.0.2"
+  }
+}
