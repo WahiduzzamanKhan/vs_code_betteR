@@ -14,10 +14,21 @@ function installedPackages(): string {
     });
 }
 
-function workspaceSnapshot(): Record<string, string> {
+/** The pristine fixture the test workspace was copied from. */
+const fixture = path.resolve(__dirname, '../../../test-fixtures/workspace');
+
+/**
+ * File name -> contents. `.vscode/` is skipped: the fresh VS Code profile used
+ * by the test harness creates it on startup, before any extension runs (a
+ * normal window doesn't).
+ */
+function snapshot(dir: string): Record<string, string> {
     const snap: Record<string, string> = {};
-    for (const f of fs.readdirSync(workspace())) {
-        snap[f] = fs.readFileSync(path.join(workspace(), f), 'utf8');
+    for (const f of fs.readdirSync(dir, { recursive: true }) as string[]) {
+        const full = path.join(dir, f);
+        if (f.split(path.sep)[0] !== '.vscode' && fs.statSync(full).isFile()) {
+            snap[f] = fs.readFileSync(full, 'utf8');
+        }
     }
     return snap;
 }
@@ -46,13 +57,11 @@ async function waitFor<T>(what: string, probe: () => Promise<T>, ok: (v: T) => b
 
 suite('betterR: one live R session shared by console and editor', () => {
     let packagesBefore: string;
-    let filesBefore: Record<string, string>;
     let doc: vscode.TextDocument;
     let session: Session;
 
     suiteSetup(async () => {
         packagesBefore = installedPackages();
-        filesBefore = workspaceSnapshot();
 
         doc = await vscode.workspace.openTextDocument(path.join(workspace(), 'analysis.R'));
         await vscode.window.showTextDocument(doc);
@@ -106,6 +115,6 @@ suite('betterR: one live R session shared by console and editor', () => {
 
     test('nothing is installed into the R library or written to the project', () => {
         assert.strictEqual(installedPackages(), packagesBefore, 'R library changed');
-        assert.deepStrictEqual(workspaceSnapshot(), filesBefore, 'project files (incl. renv.lock) changed');
+        assert.deepStrictEqual(snapshot(workspace()), snapshot(fixture), 'project files (incl. renv.lock) changed');
     });
 });
