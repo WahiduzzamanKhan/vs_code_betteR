@@ -92,6 +92,11 @@ export class Session implements vscode.Disposable {
     private keepConsoleFocus = false;
     readonly plots: PlotsPanel;
     private nextRenderId = 1;
+    private readonly killOnHostExit = () => {
+        if (this.isRunning) {
+            this.kernel.kill('SIGKILL');
+        }
+    };
     private readonly pendingRenders = new Map<number, { resolve: (img: PlotImage) => void; reject: (e: Error) => void }>();
     private consoleDocVersion = 0;
     private disposed = false;
@@ -109,6 +114,9 @@ export class Session implements vscode.Disposable {
         private readonly ideSocket: string,
         private readonly output: vscode.LogOutputChannel,
     ) {
+        // Backstop for an extension host that exits without deactivating us:
+        // never leave an orphaned R process behind.
+        process.on('exit', this.killOnHostExit);
         this.plots = new PlotsPanel({
             renderPlot: (commId, size, pixelRatio, format) => this.renderPlot(commId, size, pixelRatio, format),
             setPlotSize: (size, pixelRatio) => ide.send({ type: 'plot_settings', size, pixel_ratio: pixelRatio }),
@@ -439,28 +447,34 @@ export class Session implements vscode.Disposable {
         }
         this.disposed = true;
         clearTimeout(this.detachTimer);
+        // Stop R first: VS Code allows deactivation very little time, and
+        // nothing else here may get to run before the extension host exits.
+        const crashed = !this.isRunning;
+        const exited = crashed ? Promise.resolve() : new Promise((resolve) => this.kernel.once('exit', resolve));
+        if (!crashed) {
+            this.kernel.kill('SIGTERM');
+        }
         if (this.debugSession) {
-            await vscode.debug.stopDebugging(this.debugSession);
+            void vscode.debug.stopDebugging(this.debugSession);
         }
         this.disposables.forEach((d) => d.dispose());
         this.terminal?.dispose();
         try {
             await this.client.stop(2000);
         } catch {
-            // The server may already be gone with the kernel.
+            // The server goes away with the kernel.
         }
+        await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 3000))]);
         if (this.isRunning) {
-            const exited = new Promise((resolve) => this.kernel.once('exit', resolve));
-            this.kernel.kill('SIGTERM');
-            await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 3000))]);
-            if (this.isRunning) {
-                this.kernel.kill('SIGKILL');
-            }
-            fs.rmSync(this.dir, { recursive: true, force: true });
-        } else {
+            this.kernel.kill('SIGKILL');
+        }
+        process.off('exit', this.killOnHostExit);
+        if (crashed) {
             // Kernel died on its own: keep its log for diagnosis.
             fs.rmSync(this.connectionFile, { force: true });
             this.output.appendLine(`ark log kept at ${this.logFile}`);
+        } else {
+            fs.rmSync(this.dir, { recursive: true, force: true });
         }
     }
 }
