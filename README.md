@@ -31,7 +31,7 @@ In the new window, open any `.R` file. The R session starts and an **R** termina
 | Run the statement at the cursor (a whole function definition, a pipe chain, …) or the selection | **Cmd+Enter** (Ctrl+Enter); the cursor moves past it |
 | Debug with `browser()` | Put `browser()` in a function, run the function with Cmd+Enter, and call it. VS Code stops on that line. |
 | Debug with breakpoints | Click the gutter, re-run the function definition with Cmd+Enter, and call it |
-| Step / continue / stop | Debug toolbar (F10, F11, F5, Shift+F5), or `n`, `s`, `c`, `Q` in the console; both stay in sync |
+| Step / continue / stop | Debug toolbar (F10, F11, F5, Shift+F5), or `n`, `s`, `c`, `Q` in the console; both stay in sync. Stepping from the console keeps keyboard focus in the console while the editor follows the current line. |
 | Open or reopen the console | Status bar **R** item, or *betterR: Open R Console* |
 | Restart R | *betterR: Restart R Session* |
 | Detach the console without killing R | Ctrl-D in the terminal, then reopen it from the status bar |
