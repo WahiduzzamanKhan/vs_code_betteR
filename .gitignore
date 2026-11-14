@@ -1,0 +1,7 @@
+node_modules/
+/out/
+/.vscode-test/
+# Editor state VS Code may create when the fixture workspace is opened
+/test-fixtures/workspace/.vscode/
+*.log
+.DS_Store
