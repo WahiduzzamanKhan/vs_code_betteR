@@ -1,3 +1,4 @@
+import * as cp from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -21,6 +22,17 @@ async function main(): Promise<void> {
     } finally {
         fs.rmSync(workspace, { recursive: true, force: true });
     }
+
+    // Closing VS Code must not leave an R session behind.
+    await new Promise((r) => setTimeout(r, 1000));
+    const orphans = cp
+        .execFileSync('ps', ['-ax', '-o', 'pid=,command='], { encoding: 'utf8' })
+        .split('\n')
+        .filter((line) => /\/ark --connection_file \S*betterr-vscode-/.test(line));
+    if (orphans.length) {
+        throw new Error(`ark still running after VS Code exited:\n${orphans.join('\n')}`);
+    }
+    console.log('No orphaned ark processes.');
 }
 
 main().catch((err) => {
