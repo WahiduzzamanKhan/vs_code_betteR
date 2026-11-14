@@ -87,6 +87,8 @@ export class Session implements vscode.Disposable {
     debugSession: vscode.DebugSession | undefined;
     private startingDebug = false;
     private detachTimer: NodeJS.Timeout | undefined;
+    /** The current stop came from input typed in the console. */
+    private keepConsoleFocus = false;
     private consoleDocVersion = 0;
     private disposed = false;
     private readonly disposables: vscode.Disposable[] = [];
@@ -122,6 +124,12 @@ export class Session implements vscode.Disposable {
                 }
             }),
             vscode.debug.onDidChangeBreakpoints(() => this.syncDebugSession()),
+            vscode.debug.onDidChangeActiveStackItem((item) => {
+                if (item && this.keepConsoleFocus) {
+                    this.keepConsoleFocus = false;
+                    this.returnFocusToConsole();
+                }
+            }),
         );
     }
 
@@ -212,6 +220,7 @@ export class Session implements vscode.Disposable {
                 break;
             case 'debug':
                 this.paused = msg.state === 'start';
+                this.keepConsoleFocus = this.paused && msg.origin === 'console';
                 this.syncDebugSession();
                 break;
             case 'complete':
@@ -237,7 +246,8 @@ export class Session implements vscode.Disposable {
             void vscode.debug
                 .startDebugging(
                     vscode.workspace.workspaceFolders?.[0],
-                    { type: 'ark', request: 'attach', name: 'R' },
+                    // The R terminal is the debug console; keep VS Code's from replacing it.
+                    { type: 'ark', request: 'attach', name: 'R', internalConsoleOptions: 'neverOpen' },
                     { suppressSaveBeforeStart: true },
                 )
                 .then(
@@ -251,6 +261,22 @@ export class Session implements vscode.Disposable {
                 }
             }, 750);
         }
+    }
+
+    /**
+     * VS Code focuses the editor when it shows a stopped frame. That's right
+     * for steps clicked in the toolbar, but when you're stepping by typing in
+     * the console, focus should stay there. The frame is selected (line
+     * highlighted) first, then the editor opens, so hand focus back once it has.
+     */
+    private returnFocusToConsole(): void {
+        const done = () => {
+            clearTimeout(fallback);
+            listener.dispose();
+            setTimeout(() => this.terminal?.show(false), 50);
+        };
+        const listener = vscode.window.onDidChangeTextEditorSelection(done);
+        const fallback = setTimeout(done, 500);
     }
 
     /** Console completion runs through this (the kernel's only) LSP client. */
