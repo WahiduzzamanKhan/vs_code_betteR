@@ -1,0 +1,111 @@
+import * as assert from 'assert';
+import * as cp from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as vscode from 'vscode';
+import type { BetterRApi } from '../../extension';
+import type { Session } from '../../session';
+
+const workspace = () => vscode.workspace.workspaceFolders![0].uri.fsPath;
+
+function installedPackages(): string {
+    return cp.execFileSync('Rscript', ['-e', 'cat(sort(rownames(installed.packages())), sep = "\\n")'], {
+        encoding: 'utf8',
+    });
+}
+
+function workspaceSnapshot(): Record<string, string> {
+    const snap: Record<string, string> = {};
+    for (const f of fs.readdirSync(workspace())) {
+        snap[f] = fs.readFileSync(path.join(workspace(), f), 'utf8');
+    }
+    return snap;
+}
+
+async function completionLabels(uri: vscode.Uri, pos: vscode.Position): Promise<string[]> {
+    const list = await vscode.commands.executeCommand<vscode.CompletionList>(
+        'vscode.executeCompletionItemProvider',
+        uri,
+        pos,
+    );
+    return list.items.map((i) => (typeof i.label === 'string' ? i.label : i.label.label));
+}
+
+async function waitFor<T>(what: string, probe: () => Promise<T>, ok: (v: T) => boolean, ms = 90_000): Promise<T> {
+    const deadline = Date.now() + ms;
+    let last: T | undefined;
+    while (Date.now() < deadline) {
+        last = await probe();
+        if (ok(last)) {
+            return last;
+        }
+        await new Promise((r) => setTimeout(r, 500));
+    }
+    assert.fail(`timed out waiting for ${what}; last value: ${JSON.stringify(last)}`);
+}
+
+suite('betterR: one live R session shared by console and editor', () => {
+    let packagesBefore: string;
+    let filesBefore: Record<string, string>;
+    let doc: vscode.TextDocument;
+    let session: Session;
+
+    suiteSetup(async () => {
+        packagesBefore = installedPackages();
+        filesBefore = workspaceSnapshot();
+
+        doc = await vscode.workspace.openTextDocument(path.join(workspace(), 'analysis.R'));
+        await vscode.window.showTextDocument(doc);
+        const ext = vscode.extensions.getExtension<BetterRApi>('betterr.betterr-vscode')!;
+        session = await (await ext.activate()).ready();
+    });
+
+    test('console opens in a terminal attached to the session', () => {
+        assert.ok(session.terminal, 'console terminal should open on start');
+        assert.ok(session.isRunning);
+    });
+
+    test('object created in the console completes in the editor (y <- mtcars; y$)', async () => {
+        // Typed into the terminal console, exactly as a user would.
+        session.terminal!.sendText('y <- mtcars\r', false);
+        const labels = await waitFor(
+            'mtcars columns at y$',
+            () => completionLabels(doc.uri, new vscode.Position(4, 2)),
+            (l) => l.includes('mpg'),
+        );
+        for (const col of ['mpg', 'cyl', 'hp', 'carb']) {
+            assert.ok(labels.includes(col), `missing ${col} in ${labels}`);
+        }
+    });
+
+    test('hover shows R help from the live session', async () => {
+        const hovers = await vscode.commands.executeCommand<vscode.Hover[]>(
+            'vscode.executeHoverProvider',
+            doc.uri,
+            new vscode.Position(2, 1),
+        );
+        const text = hovers
+            .flatMap((h) => h.contents)
+            .map((c) => (typeof c === 'string' ? c : c.value))
+            .join('\n');
+        assert.match(text, /Arithmetic Mean/);
+    });
+
+    test('Run Selection sends editor code to the console session', async () => {
+        const editor = await vscode.window.showTextDocument(doc);
+        editor.selection = new vscode.Selection(1, 0, 1, 0);
+        await vscode.commands.executeCommand('betterR.runSelection');
+        // The name is built at runtime, so only the live session can know it.
+        await waitFor(
+            'runtime-only symbol from Run Selection',
+            () => completionLabels(doc.uri, new vscode.Position(3, 9)),
+            (l) => l.includes('dyn_from_editor'),
+        );
+        assert.strictEqual(editor.selection.active.line, 2, 'cursor advances to the next line');
+    });
+
+    test('nothing is installed into the R library or written to the project', () => {
+        assert.strictEqual(installedPackages(), packagesBefore, 'R library changed');
+        assert.deepStrictEqual(workspaceSnapshot(), filesBefore, 'project files (incl. renv.lock) changed');
+    });
+});
