@@ -7,6 +7,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { LanguageClient, LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node';
 import { IdeChannel, IdeMessage } from './ide';
+import { PlotImage, PlotsPanel } from './plots';
 
 const CONSOLE_NAME = 'R';
 
@@ -89,6 +90,9 @@ export class Session implements vscode.Disposable {
     private detachTimer: NodeJS.Timeout | undefined;
     /** The current stop came from input typed in the console. */
     private keepConsoleFocus = false;
+    readonly plots: PlotsPanel;
+    private nextRenderId = 1;
+    private readonly pendingRenders = new Map<number, { resolve: (img: PlotImage) => void; reject: (e: Error) => void }>();
     private consoleDocVersion = 0;
     private disposed = false;
     private readonly disposables: vscode.Disposable[] = [];
@@ -105,8 +109,14 @@ export class Session implements vscode.Disposable {
         private readonly ideSocket: string,
         private readonly output: vscode.LogOutputChannel,
     ) {
+        this.plots = new PlotsPanel({
+            renderPlot: (commId, size, pixelRatio, format) => this.renderPlot(commId, size, pixelRatio, format),
+            setPlotSize: (size, pixelRatio) => ide.send({ type: 'plot_settings', size, pixel_ratio: pixelRatio }),
+            closePlot: (commId) => ide.send({ type: 'plot_close', comm_id: commId }),
+        });
         this.disposables.push(
             ide,
+            this.plots,
             ide.onMessage((msg) => this.onIdeMessage(msg)),
             vscode.window.onDidCloseTerminal((t) => {
                 if (t === this.terminal) {
@@ -226,7 +236,55 @@ export class Session implements vscode.Disposable {
             case 'complete':
                 void this.completeForConsole(msg.id as number, msg.text as string, msg.offset as number);
                 break;
+            case 'plot_open':
+                this.plots.onOpen(msg.comm_id as string, msg.pre_render as PlotImage | undefined);
+                break;
+            case 'plot_update':
+                this.plots.onUpdate(msg.comm_id as string, msg.pre_render as PlotImage | undefined);
+                break;
+            case 'plot_close':
+                this.plots.onClose(msg.comm_id as string);
+                break;
+            case 'plot_render_reply': {
+                const pending = this.pendingRenders.get(msg.id as number);
+                this.pendingRenders.delete(msg.id as number);
+                const result = msg.result as PlotImage | null;
+                if (result?.data) {
+                    pending?.resolve(result);
+                } else {
+                    pending?.reject(new Error((msg.error as { message?: string } | null)?.message ?? 'Plot render failed'));
+                }
+                break;
+            }
         }
+    }
+
+    /** Asks ark (via the console) to render a plot at a given size and format. */
+    renderPlot(
+        commId: string,
+        size: { width: number; height: number },
+        pixelRatio: number,
+        format: 'png' | 'svg',
+    ): Promise<PlotImage> {
+        const id = this.nextRenderId++;
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                this.pendingRenders.delete(id);
+                reject(new Error('Plot render timed out'));
+            }, 15_000);
+            this.pendingRenders.set(id, {
+                resolve: (img) => (clearTimeout(timer), resolve(img)),
+                reject: (err) => (clearTimeout(timer), reject(err)),
+            });
+            this.ide.send({
+                type: 'plot_render',
+                id,
+                comm_id: commId,
+                size: { width: size.width, height: size.height },
+                pixel_ratio: pixelRatio,
+                format,
+            });
+        });
     }
 
     /**

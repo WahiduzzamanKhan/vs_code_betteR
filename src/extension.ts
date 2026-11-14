@@ -59,6 +59,7 @@ export function activate(context: vscode.ExtensionContext): BetterRApi {
 
     context.subscriptions.push(
         vscode.commands.registerCommand('betterR.openConsole', async () => (await session()).openConsole()),
+        vscode.commands.registerCommand('betterR.showPlots', async () => (await session()).plots.show()),
         vscode.commands.registerCommand('betterR.restart', async () => {
             const old = current;
             current = undefined;
