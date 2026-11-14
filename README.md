@@ -1,4 +1,4 @@
-# betterR VS Code extension (Phases 2–3)
+# betterR VS Code extension (Phases 2–4)
 
 Runs **one** ark R session per window and connects every view to it:
 
@@ -6,11 +6,13 @@ Runs **one** ark R session per window and connects every view to it:
 VS Code extension ── spawns ark, owns kernel.json, listens on ide.sock
    ├─ language client ── betterr --lsp-stdio -f kernel.json ──► ark LSP   (completion, hover, statement ranges, virtual docs)
    ├─ debugger        ── in-process bridge ─────────────────► ark DAP   (port reported by the console)
+   ├─ R Plots pane    ── render requests ── ide.sock ── console ──► ark graphics device (positron.plot comms)
    └─ terminal "R"    ── betterr -f kernel.json --ide-socket ide.sock ──► ark Jupyter (the console; holds ark's debugger comm)
 ```
 
 - **Shared session.** Run `y <- mtcars` in the console, type `y$` in an `.R` file, and the editor completes the live columns.
 - **Debugging.** `browser()` and gutter breakpoints stop VS Code's debugger on the real file line, with the variables pane filled in. Step and Continue work from the toolbar or by typing `n` and `c` in the console.
+- **Plots without `httpgd`.** Plots appear in an *R Plots* pane, re-rendered by ark at the pane's exact size and pixel ratio. The pane keeps a history and saves to PNG or SVG.
 - **Nothing is installed** into the R library, and no project files change.
 
 ## Try it
@@ -32,6 +34,7 @@ In the new window, open any `.R` file. The R session starts and an **R** termina
 | Debug with `browser()` | Put `browser()` in a function, run the function with Cmd+Enter, and call it. VS Code stops on that line. |
 | Debug with breakpoints | Click the gutter, re-run the function definition with Cmd+Enter, and call it |
 | Step / continue / stop | Debug toolbar (F10, F11, F5, Shift+F5), or `n`, `s`, `c`, `Q` in the console; both stay in sync. Stepping from the console keeps keyboard focus in the console while the editor follows the current line. |
+| Plots | Shown automatically in *R Plots*. Use ◀ ▶ for history, *Save…* for PNG or SVG, and *Remove* to drop a plot. Reopen with *betterR: Show Plots*. |
 | Open or reopen the console | Status bar **R** item, or *betterR: Open R Console* |
 | Restart R | *betterR: Restart R Session* |
 | Detach the console without killing R | Ctrl-D in the terminal, then reopen it from the status bar |
@@ -66,6 +69,12 @@ The tests open a copy of `test-fixtures/workspace` in a real VS Code with other 
 2. A gutter breakpoint on `debug.R:8` stops `times_two(5)` there, with `v = 5`, and Continue returns `10`.
 3. A function typed straight into the console stops in an `ark:` virtual document whose text VS Code can open.
 
+**Plots (Phase 4):**
+1. `plot()` opens the *R Plots* pane. The pane reports its size, and the plot is re-rendered to exactly that size × pixel ratio, replacing the 640×400 pre-render.
+2. Plots render on demand at any size as PNG (checked pixel-exact) or SVG.
+3. `lines()` updates the current plot in place instead of adding a history entry.
+4. A new plot is added to the history, earlier plots can be shown again, and removing a plot makes ark free it.
+
 ## Design notes
 
 - **No ZeroMQ in Node.** The extension never speaks Jupyter itself. `betterr --lsp-stdio` bridges ark's LSP to stdio for `vscode-languageclient`. The console talks to the extension over a Unix socket of JSON lines (`ide.sock`), and the debugger uses a small in-process DAP bridge to ark's TCP port. There are no native modules.
@@ -73,4 +82,5 @@ The tests open a copy of `test-fixtures/workspace` in a real VS Code with other 
 - **The console owns ark's debugger comm**, because ark runs Step and Continue as console input ("as if typed"). When you click Step, ark sends the console `execute n`; the console wakes from line editing, echoes `Browse[1]> n` and runs it. Run Selection works the same way: the code is echoed one expression per prompt, with your half-typed input preserved.
 - **Run Selection carries a file location** (`positron.code_location`, UTF-8 columns). Ark attaches srcrefs into that file and injects breakpoints, so the debugger shows the real line.
 - **Debug session lifecycle.** VS Code is attached while R is paused or while any R breakpoints exist, which ark needs in order to receive them. Otherwise it is detached, so the debug toolbar only appears when it means something. Detaching is debounced because every step briefly leaves the browser. Ark doesn't replay `stopped` to a client that attaches while R is already paused, so the bridge sends it.
+- **Plots come from ark's own graphics device.** The console opens ark's UI comm, so ark announces each plot as a `positron.plot` comm with a PNG pre-render and serves `render` requests at any size and format. The console relays plot events and render requests over `ide.sock` from its background thread, without disturbing the prompt. The pane tells ark its size (`did_change_plots_render_settings`), so later pre-renders already fit.
 - **Lifecycle.** The extension owns ark. Closing the console only detaches it. `q()` in the console ends the session, and the extension offers *Restart R*. On window close, ark is stopped and its temp dir removed. If ark crashes, its log is kept and its path is written to the *betterR* output channel.
