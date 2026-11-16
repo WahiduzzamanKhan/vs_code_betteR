@@ -60,6 +60,14 @@ export function activate(context: vscode.ExtensionContext): BetteRApi {
     context.subscriptions.push(
         vscode.commands.registerCommand('betteR.openConsole', async () => (await session()).openConsole()),
         vscode.commands.registerCommand('betteR.showPlots', async () => (await session()).plots.show()),
+        vscode.commands.registerCommand('betteR.showViewer', async () => {
+            const s = await session();
+            if (s.viewer.url) {
+                s.viewer.show(s.viewer.url, s.viewer.title);
+            } else {
+                void vscode.window.showInformationMessage('Nothing to view yet. htmlwidgets and Shiny apps from R appear here.');
+            }
+        }),
         vscode.commands.registerCommand('betteR.restart', async () => {
             const old = current;
             current = undefined;

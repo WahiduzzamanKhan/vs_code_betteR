@@ -29,6 +29,11 @@
         "category": "betteR"
       },
       {
+        "command": "betteR.showViewer",
+        "title": "Show Viewer",
+        "category": "betteR"
+      },
+      {
         "command": "betteR.runSelection",
         "title": "Run Selection or Line in R Console",
         "category": "betteR"

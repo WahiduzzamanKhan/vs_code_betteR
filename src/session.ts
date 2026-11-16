@@ -7,7 +7,9 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { LanguageClient, LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node';
 import { IdeChannel, IdeMessage } from './ide';
+import { HtmlServer, isLocalUrl } from './htmlServer';
 import { PlotImage, PlotsPanel } from './plots';
+import { ViewerPanel } from './viewer';
 
 const CONSOLE_NAME = 'R';
 
@@ -91,6 +93,7 @@ export class Session implements vscode.Disposable {
     /** The current stop came from input typed in the console. */
     private keepConsoleFocus = false;
     readonly plots: PlotsPanel;
+    readonly viewer = new ViewerPanel();
     private nextRenderId = 1;
     private readonly killOnHostExit = () => {
         if (this.isRunning) {
@@ -112,6 +115,7 @@ export class Session implements vscode.Disposable {
         readonly client: LanguageClient,
         readonly ide: IdeChannel,
         private readonly ideSocket: string,
+        readonly htmlServer: HtmlServer,
         private readonly output: vscode.LogOutputChannel,
     ) {
         // Backstop for an extension host that exits without deactivating us:
@@ -124,7 +128,9 @@ export class Session implements vscode.Disposable {
         });
         this.disposables.push(
             ide,
+            htmlServer,
             this.plots,
+            this.viewer,
             ide.onMessage((msg) => this.onIdeMessage(msg)),
             vscode.window.onDidCloseTerminal((t) => {
                 if (t === this.terminal) {
@@ -184,6 +190,7 @@ export class Session implements vscode.Disposable {
         // The connection file holds the HMAC key: owner-only.
         fs.writeFileSync(connectionFile, JSON.stringify(info, null, 2), { mode: 0o600 });
         const ide = await IdeChannel.listen(ideSocket);
+        const htmlServer = await HtmlServer.start();
 
         const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         output.appendLine(`Starting ark: ${ark}`);
@@ -212,7 +219,7 @@ export class Session implements vscode.Disposable {
             },
         };
         const client = new LanguageClient('betteR', 'betteR (ark)', serverOptions, clientOptions);
-        const session = new Session(kernel, connectionFile, logFile, dir, consolePath, cwd, client, ide, ideSocket, output);
+        const session = new Session(kernel, connectionFile, logFile, dir, consolePath, cwd, client, ide, ideSocket, htmlServer, output);
 
         kernel.on('exit', (code, signal) => {
             output.appendLine(`ark exited (code ${code}, signal ${signal})`);
@@ -253,6 +260,15 @@ export class Session implements vscode.Disposable {
             case 'plot_close':
                 this.plots.onClose(msg.comm_id as string);
                 break;
+            case 'show_html_file':
+                void this.showHtmlFile(msg.params as { path: string; title: string; destination: string });
+                break;
+            case 'show_url':
+                void this.showUrl((msg.params as { url: string }).url);
+                break;
+            case 'open_with_system':
+                void vscode.env.openExternal(vscode.Uri.file((msg.params as { path: string }).path));
+                break;
             case 'plot_render_reply': {
                 const pending = this.pendingRenders.get(msg.id as number);
                 this.pendingRenders.delete(msg.id as number);
@@ -264,6 +280,29 @@ export class Session implements vscode.Disposable {
                 }
                 break;
             }
+        }
+    }
+
+    /**
+     * An HTML file from R: an htmlwidget (plotly, leaflet, DT, ...) or `viewer`
+     * output. Plot-like widgets join the plot history; the rest go to the Viewer.
+     */
+    private async showHtmlFile(params: { path: string; title: string; destination: string }): Promise<void> {
+        const url = (await vscode.env.asExternalUri(vscode.Uri.parse(this.htmlServer.register(params.path)))).toString(true);
+        if (params.destination === 'plot') {
+            this.plots.onHtml(url, params.title);
+        } else {
+            this.viewer.show(url, params.title);
+        }
+    }
+
+    /** A URL from R (`browseURL()`, Shiny): local apps in the Viewer, the rest in the browser. */
+    private async showUrl(url: string): Promise<void> {
+        if (isLocalUrl(url)) {
+            const external = (await vscode.env.asExternalUri(vscode.Uri.parse(url))).toString(true);
+            this.viewer.show(external, new URL(url).host);
+        } else {
+            await vscode.env.openExternal(vscode.Uri.parse(url));
         }
     }
 

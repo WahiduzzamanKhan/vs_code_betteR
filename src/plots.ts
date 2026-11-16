@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as vscode from 'vscode';
+import { iframeCsp } from './htmlServer';
 
 export interface PlotImage {
     data: string;
@@ -15,8 +16,11 @@ export interface PlotHost {
 }
 
 interface PlotEntry {
+    /** ark's plot comm, or a synthetic id for interactive (HTML) plots. */
     commId: string;
     image?: PlotImage;
+    /** Interactive plot (htmlwidget) served over localhost. */
+    html?: { url: string; title: string };
 }
 
 interface Viewport {
@@ -26,8 +30,9 @@ interface Viewport {
 }
 
 /**
- * The "R Plots" panel: plot history from the live session, each plot
- * re-rendered by ark at the panel's exact size and pixel ratio (no httpgd).
+ * The "R Plots" panel: plot history from the live session. Static plots are
+ * re-rendered by ark at the panel's exact size and pixel ratio (no httpgd);
+ * interactive ones (plotly, leaflet, ... htmlwidgets) run live in an iframe.
  */
 export class PlotsPanel implements vscode.Disposable {
     readonly plots: PlotEntry[] = [];
@@ -35,6 +40,7 @@ export class PlotsPanel implements vscode.Disposable {
     private panel: vscode.WebviewPanel | undefined;
     private viewport: Viewport | undefined;
     private renderSeq = 0;
+    private htmlSeq = 0;
 
     constructor(private readonly host: PlotHost) {}
 
@@ -51,6 +57,14 @@ export class PlotsPanel implements vscode.Disposable {
         this.index = this.plots.length - 1;
         this.show();
         void this.refresh();
+    }
+
+    /** An interactive plot: a live page rather than an image. */
+    onHtml(url: string, title: string): void {
+        this.plots.push({ commId: `html-${++this.htmlSeq}`, html: { url, title } });
+        this.index = this.plots.length - 1;
+        this.show();
+        this.post();
     }
 
     onUpdate(commId: string, preRender: PlotImage | undefined): void {
@@ -86,7 +100,9 @@ export class PlotsPanel implements vscode.Disposable {
     removeCurrent(): void {
         const entry = this.current;
         if (entry) {
-            this.host.closePlot(entry.commId);
+            if (!entry.html) {
+                this.host.closePlot(entry.commId);
+            }
             this.onClose(entry.commId);
         }
     }
@@ -144,7 +160,7 @@ export class PlotsPanel implements vscode.Disposable {
         this.post();
         const entry = this.current;
         const viewport = this.viewport;
-        if (!entry || !viewport) {
+        if (!entry || entry.html || !viewport) {
             return;
         }
         const size = entry.image?.settings?.size;
@@ -168,6 +184,7 @@ export class PlotsPanel implements vscode.Disposable {
         void this.panel?.webview.postMessage({
             type: 'plot',
             src: entry?.image ? `data:${entry.image.mime_type};base64,${entry.image.data}` : undefined,
+            html: entry?.html?.url,
             index: this.index,
             count: this.plots.length,
         });
@@ -176,6 +193,11 @@ export class PlotsPanel implements vscode.Disposable {
     private async save(): Promise<void> {
         const entry = this.current;
         if (!entry) {
+            return;
+        }
+        if (entry.html) {
+            // A live page can't be flattened to an image; open it where it can be saved or shared.
+            void vscode.env.openExternal(vscode.Uri.parse(entry.html.url));
             return;
         }
         const target = await vscode.window.showSaveDialog({
@@ -195,7 +217,7 @@ export class PlotsPanel implements vscode.Disposable {
         const nonce = crypto.randomBytes(16).toString('base64');
         return `<!DOCTYPE html>
 <html><head><meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
+<meta http-equiv="Content-Security-Policy" content="${iframeCsp(nonce)}">
 <style>
   html, body { height: 100%; margin: 0; overflow: hidden; color: var(--vscode-foreground); font-family: var(--vscode-font-family); }
   body { display: flex; flex-direction: column; }
@@ -207,6 +229,7 @@ export class PlotsPanel implements vscode.Disposable {
   .spacer { flex: 1; }
   #view { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
   #plot { max-width: 100%; max-height: 100%; }
+  #frame { width: 100%; height: 100%; border: 0; background: white; }
   #empty { opacity: .6; }
 </style></head>
 <body>
@@ -218,7 +241,7 @@ export class PlotsPanel implements vscode.Disposable {
     <button id="save" title="Save as PNG or SVG">Save…</button>
     <button id="remove" title="Remove this plot">Remove</button>
   </div>
-  <div id="view"><span id="empty">No plots yet. Plot something in the R console.</span><img id="plot" hidden alt="R plot"></div>
+  <div id="view"><span id="empty">No plots yet. Plot something in the R console.</span><img id="plot" hidden alt="R plot"><iframe id="frame" hidden></iframe></div>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   const view = document.getElementById('view'), img = document.getElementById('plot');
@@ -237,10 +260,17 @@ export class PlotsPanel implements vscode.Disposable {
     document.getElementById('count').textContent = data.count ? (data.index + 1) + ' / ' + data.count : '0 / 0';
     document.getElementById('prev').disabled = data.index <= 0;
     document.getElementById('next').disabled = data.index >= data.count - 1;
-    document.getElementById('save').disabled = document.getElementById('remove').disabled = !data.src;
-    document.getElementById('empty').hidden = !!data.src;
+    const frame = document.getElementById('frame'), save = document.getElementById('save');
+    const any = !!(data.src || data.html);
+    save.disabled = document.getElementById('remove').disabled = !any;
+    save.textContent = data.html ? 'Open in Browser' : 'Save…';
+    save.title = data.html ? 'Interactive plot: open it in your browser' : 'Save as PNG or SVG';
+    document.getElementById('empty').hidden = any;
     img.hidden = !data.src;
+    frame.hidden = !data.html;
     if (data.src) img.src = data.src;
+    if (data.html && frame.getAttribute('src') !== data.html) frame.src = data.html;
+    if (!data.html) frame.removeAttribute('src');
   });
   vscode.postMessage({ type: 'ready' });
 </script>
