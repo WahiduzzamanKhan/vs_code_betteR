@@ -8,6 +8,7 @@ VS Code extension ── spawns ark, owns kernel.json, listens on ide.sock
    ├─ debugger        ── in-process bridge ─────────────────► ark DAP   (port reported by the console)
    ├─ R Plots pane    ── render requests ── ide.sock ── console ──► ark graphics device (positron.plot comms)
    ├─ R Viewer        ── localhost file server ◄── show_html_file / show_url ── console ◄── ark UI comm
+   ├─ R Help          ── localhost relay ──► ark help proxy ◄── show_help ── console ◄── ark help comm
    └─ terminal "R"    ── better -f kernel.json --ide-socket ide.sock ──► ark Jupyter (the console; holds ark's debugger comm)
 ```
 
@@ -15,6 +16,7 @@ VS Code extension ── spawns ark, owns kernel.json, listens on ide.sock
 - **Debugging.** `browser()` and gutter breakpoints stop VS Code's debugger on the real file line, with the variables pane filled in. Step and Continue work from the toolbar or by typing `n` and `c` in the console.
 - **Plots without `httpgd`.** Plots appear in an *R Plots* pane, re-rendered by ark at the pane's exact size and pixel ratio. The pane keeps a history and saves to PNG or SVG.
 - **Interactive output.** Plot-like htmlwidgets (plotly, leaflet, …) run live in the *R Plots* history. Other widgets (DT tables, …), `viewer` output and local web apps (Shiny, plumber) run live in an *R Viewer* panel. External URLs open in your browser.
+- **Help pages.** `?topic`, `help()`, `??search` and package indexes open in an *R Help* panel with Back/Forward. **F1** in an `.R` file shows help for the symbol at the cursor, as in RStudio.
 - **Nothing is installed** into the R library, and no project files change.
 
 ## Try it
@@ -36,7 +38,8 @@ In the new window, open any `.R` file. The R session starts and an **R** termina
 | Debug with `browser()` | Put `browser()` in a function, run the function with Cmd+Enter, and call it. VS Code stops on that line. |
 | Debug with breakpoints | Click the gutter, re-run the function definition with Cmd+Enter, and call it |
 | Step / continue / stop | Debug toolbar (F10, F11, F5, Shift+F5), or `n`, `s`, `c`, `Q` in the console; both stay in sync. Stepping from the console keeps keyboard focus in the console while the editor follows the current line. |
-| Plots | Shown automatically in *R Plots*. Use ◀ ▶ for history, *Save…* for PNG or SVG, and *Remove* to drop a plot. Reopen with *betteR: Show Plots*. |
+| Plots | Shown automatically in *R Plots*. Use ◀ ▶ for history, *Save…* for PNG or SVG, *Remove* to drop a plot and *Clear* to remove them all (asks first; also *betteR: Clear All Plots*). Reopen with *betteR: Show Plots*. |
+| Help | `?mean`, `help("lm")`, `??regression` in the console, or **F1** on a symbol in the editor (*betteR: Help for Symbol at Cursor*). Links work inside the panel; ◀ ▶ go back and forward. |
 | Interactive charts and apps | Just print the widget or run the app. Plot-like widgets join the *R Plots* history (*Open in Browser* instead of *Save…*); the rest appear in *R Viewer* (*Reload*, *Open in Browser*). Reopen with *betteR: Show Viewer*. |
 | Open or reopen the console | Status bar **R** item, or *betteR: Open R Console* |
 | Restart R | *betteR: Restart R Session* |
@@ -78,6 +81,12 @@ The tests open a copy of `test-fixtures/workspace` in a real VS Code with other 
 3. `lines()` updates the current plot in place instead of adding a history entry.
 4. A new plot is added to the history, earlier plots can be shown again, and removing a plot makes ark free it.
 
+**Help:**
+1. `?mean` typed into the console opens *R Help*, and the page itself loads in the panel.
+2. Back and Forward move between `?mean` and `help("lm")`.
+3. `??regression` shows search results, and `help(package = "stats")` shows the package index.
+4. F1 on `mean(` in the editor shows `mean`'s page; an unknown symbol reports that no help was found.
+
 **Interactive output:**
 1. A plot-like htmlwidget joins the *R Plots* history as a live page, and its JavaScript, including a dependency loaded from its `*_files/` folder, runs inside the pane.
 2. `viewer` output runs live in *R Viewer*.
@@ -94,4 +103,5 @@ These tests use a hand-built page laid out like an htmlwidget, so no R packages 
 - **Debug session lifecycle.** VS Code is attached while R is paused or while any R breakpoints exist, which ark needs in order to receive them. Otherwise it is detached, so the debug toolbar only appears when it means something. Detaching is debounced because every step briefly leaves the browser. Ark doesn't replay `stopped` to a client that attaches while R is already paused, so the bridge sends it.
 - **Plots come from ark's own graphics device.** The console opens ark's UI comm, so ark announces each plot as a `positron.plot` comm with a PNG pre-render and serves `render` requests at any size and format. The console relays plot events and render requests over `ide.sock` from its background thread, without disturbing the prompt. The pane tells ark its size (`did_change_plots_render_settings`), so later pre-renders already fit.
 - **Interactive output comes from ark's UI comm.** Ark overrides `print.htmlwidget`, `options(viewer)`, `options(browser)` and `shiny.launch.browser`. It writes widgets to R's tempdir and sends `show_html_file {path, title, destination}`, or sends `show_url {url}` for web apps. The console forwards these over `ide.sock`, also while you're typing. The extension serves each widget's folder from a localhost server under a random token (only registered folders are reachable) and shows it in an iframe. `asExternalUri` keeps this working over remote connections.
+- **Help comes from ark's help comm.** Opening it starts R's help server and ark's help proxy; each request becomes `show_help {url}`. F1 asks ark's LSP for the topic at the cursor (`positron/textDocument/helpTopic`), then asks the help comm to show it (`show_help_topic`). The help page is a cross-origin iframe, so the panel loads it through a small localhost relay. The relay keeps paths unchanged, so R's absolute links work, and appends one script that reports each page's URL and title. That's what makes Back/Forward include links you followed.
 - **Lifecycle.** The extension owns ark. Closing the console only detaches it. `q()` in the console ends the session, and the extension offers *Restart R*. On window close, ark is stopped and its temp dir removed. If ark crashes, its log is kept and its path is written to the *betteR* output channel.
