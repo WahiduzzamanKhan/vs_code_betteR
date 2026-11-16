@@ -29,6 +29,11 @@
         "category": "betteR"
       },
       {
+        "command": "betteR.clearPlots",
+        "title": "Clear All Plots",
+        "category": "betteR"
+      },
+      {
         "command": "betteR.showViewer",
         "title": "Show Viewer",
         "category": "betteR"

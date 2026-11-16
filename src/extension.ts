@@ -60,6 +60,7 @@ export function activate(context: vscode.ExtensionContext): BetteRApi {
     context.subscriptions.push(
         vscode.commands.registerCommand('betteR.openConsole', async () => (await session()).openConsole()),
         vscode.commands.registerCommand('betteR.showPlots', async () => (await session()).plots.show()),
+        vscode.commands.registerCommand('betteR.clearPlots', async () => (await session()).plots.confirmClear()),
         vscode.commands.registerCommand('betteR.showViewer', async () => {
             const s = await session();
             if (s.viewer.url) {

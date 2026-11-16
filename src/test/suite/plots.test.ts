@@ -92,4 +92,20 @@ suite('betteR plots: R graphics in a VS Code pane, no httpgd', () => {
         // ark dropped the recording, so it can no longer be rendered.
         await assert.rejects(session.renderPlot(removed, { width: 100, height: 100 }, 1, 'png'));
     });
+
+    test('Clear removes every plot and frees them all', async () => {
+        session.execute('plot(1:5)');
+        session.execute('barplot(1:3)');
+        await waitFor('plots to clear', () => session.plots.plots.length, (n) => n >= 2);
+        const ids = session.plots.plots.map((p) => p.commId);
+        session.plots.clear();
+        assert.strictEqual(session.plots.plots.length, 0);
+        assert.strictEqual(session.plots.current, undefined);
+        for (const id of ids) {
+            await assert.rejects(session.renderPlot(id, { width: 100, height: 100 }, 1, 'png'));
+        }
+        // New plots still arrive after a clear.
+        session.execute('plot(1:2)');
+        await waitFor('plot after clear', () => session.plots.plots.length, (n) => n === 1);
+    });
 });

@@ -97,6 +97,32 @@ export class PlotsPanel implements vscode.Disposable {
         }
     }
 
+    /** Removes every plot, freeing ark's recordings. */
+    clear(): void {
+        for (const entry of this.plots.splice(0)) {
+            if (!entry.html) {
+                this.host.closePlot(entry.commId);
+            }
+        }
+        this.index = -1;
+        this.post();
+    }
+
+    async confirmClear(): Promise<void> {
+        if (!this.plots.length) {
+            return;
+        }
+        const n = this.plots.length;
+        const choice = await vscode.window.showWarningMessage(
+            `Remove all ${n} plot${n === 1 ? '' : 's'}?`,
+            { modal: true },
+            'Clear',
+        );
+        if (choice === 'Clear') {
+            this.clear();
+        }
+    }
+
     removeCurrent(): void {
         const entry = this.current;
         if (entry) {
@@ -148,6 +174,9 @@ export class PlotsPanel implements vscode.Disposable {
                 break;
             case 'remove':
                 this.removeCurrent();
+                break;
+            case 'clear':
+                void this.confirmClear();
                 break;
             case 'save':
                 void this.save();
@@ -240,12 +269,13 @@ export class PlotsPanel implements vscode.Disposable {
     <span class="spacer"></span>
     <button id="save" title="Save as PNG or SVG">Save…</button>
     <button id="remove" title="Remove this plot">Remove</button>
+    <button id="clear" title="Remove all plots">Clear</button>
   </div>
   <div id="view"><span id="empty">No plots yet. Plot something in the R console.</span><img id="plot" hidden alt="R plot"><iframe id="frame" hidden></iframe></div>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   const view = document.getElementById('view'), img = document.getElementById('plot');
-  for (const id of ['prev', 'next', 'save', 'remove']) {
+  for (const id of ['prev', 'next', 'save', 'remove', 'clear']) {
     document.getElementById(id).onclick = () => vscode.postMessage({ type: id });
   }
   let timer;
@@ -262,7 +292,7 @@ export class PlotsPanel implements vscode.Disposable {
     document.getElementById('next').disabled = data.index >= data.count - 1;
     const frame = document.getElementById('frame'), save = document.getElementById('save');
     const any = !!(data.src || data.html);
-    save.disabled = document.getElementById('remove').disabled = !any;
+    save.disabled = document.getElementById('remove').disabled = document.getElementById('clear').disabled = !any;
     save.textContent = data.html ? 'Open in Browser' : 'Save…';
     save.title = data.html ? 'Interactive plot: open it in your browser' : 'Save as PNG or SVG';
     document.getElementById('empty').hidden = any;
