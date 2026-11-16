@@ -39,6 +39,11 @@
         "category": "betteR"
       },
       {
+        "command": "betteR.helpAtCursor",
+        "title": "Help for Symbol at Cursor",
+        "category": "betteR"
+      },
+      {
         "command": "betteR.runSelection",
         "title": "Run Selection or Line in R Console",
         "category": "betteR"
@@ -54,6 +59,11 @@
         "command": "betteR.runSelection",
         "key": "ctrl+enter",
         "mac": "cmd+enter",
+        "when": "editorTextFocus && editorLangId == r"
+      },
+      {
+        "command": "betteR.helpAtCursor",
+        "key": "f1",
         "when": "editorTextFocus && editorLangId == r"
       }
     ],

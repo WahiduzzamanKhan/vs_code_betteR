@@ -60,6 +60,17 @@ export function activate(context: vscode.ExtensionContext): BetteRApi {
     context.subscriptions.push(
         vscode.commands.registerCommand('betteR.openConsole', async () => (await session()).openConsole()),
         vscode.commands.registerCommand('betteR.showPlots', async () => (await session()).plots.show()),
+        vscode.commands.registerCommand('betteR.helpAtCursor', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) {
+                return;
+            }
+            const word = editor.document.getText(editor.document.getWordRangeAtPosition(editor.selection.active, /[\w.:]+/));
+            const topic = await (await session()).helpAt(editor.document, editor.selection.active);
+            if (!topic) {
+                void vscode.window.showInformationMessage(`No R help found for '${word}'.`);
+            }
+        }),
         vscode.commands.registerCommand('betteR.clearPlots', async () => (await session()).plots.confirmClear()),
         vscode.commands.registerCommand('betteR.showViewer', async () => {
             const s = await session();

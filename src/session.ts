@@ -7,6 +7,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { LanguageClient, LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node';
 import { IdeChannel, IdeMessage } from './ide';
+import { HelpPanel } from './help';
 import { HtmlServer, isLocalUrl } from './htmlServer';
 import { PlotImage, PlotsPanel } from './plots';
 import { ViewerPanel } from './viewer';
@@ -94,6 +95,9 @@ export class Session implements vscode.Disposable {
     private keepConsoleFocus = false;
     readonly plots: PlotsPanel;
     readonly viewer = new ViewerPanel();
+    readonly help = new HelpPanel();
+    private nextHelpId = 1;
+    private readonly pendingHelp = new Map<number, (found: boolean) => void>();
     private nextRenderId = 1;
     private readonly killOnHostExit = () => {
         if (this.isRunning) {
@@ -131,6 +135,7 @@ export class Session implements vscode.Disposable {
             htmlServer,
             this.plots,
             this.viewer,
+            this.help,
             ide.onMessage((msg) => this.onIdeMessage(msg)),
             vscode.window.onDidCloseTerminal((t) => {
                 if (t === this.terminal) {
@@ -266,6 +271,17 @@ export class Session implements vscode.Disposable {
             case 'show_url':
                 void this.showUrl((msg.params as { url: string }).url);
                 break;
+            case 'show_help': {
+                const params = msg.params as { content: string; kind: string };
+                if (params.kind === 'url') {
+                    void this.help.show(params.content);
+                }
+                break;
+            }
+            case 'help_topic_reply':
+                this.pendingHelp.get(msg.id as number)?.(msg.found as boolean);
+                this.pendingHelp.delete(msg.id as number);
+                break;
             case 'open_with_system':
                 void vscode.env.openExternal(vscode.Uri.file((msg.params as { path: string }).path));
                 break;
@@ -304,6 +320,29 @@ export class Session implements vscode.Disposable {
         } else {
             await vscode.env.openExternal(vscode.Uri.parse(url));
         }
+    }
+
+    /**
+     * Help for the symbol at `position` (F1), like RStudio: ark's LSP picks the
+     * topic (e.g. `dplyr::filter`), ark's help shows it. Returns the topic, or
+     * undefined if there's no help for it.
+     */
+    async helpAt(doc: vscode.TextDocument, position: vscode.Position): Promise<string | undefined> {
+        const result = await this.client.sendRequest<{ topic: string } | null>('positron/textDocument/helpTopic', {
+            textDocument: { uri: doc.uri.toString(), version: doc.version },
+            position: { line: position.line, character: position.character },
+        });
+        const topic = result?.topic;
+        if (!topic) {
+            return undefined;
+        }
+        const id = this.nextHelpId++;
+        const found = await new Promise<boolean>((resolve) => {
+            const timer = setTimeout(() => (this.pendingHelp.delete(id), resolve(false)), 10_000);
+            this.pendingHelp.set(id, (ok) => (clearTimeout(timer), resolve(ok)));
+            this.ide.send({ type: 'help_topic', id, topic });
+        });
+        return found ? topic : undefined;
     }
 
     /** Asks ark (via the console) to render a plot at a given size and format. */

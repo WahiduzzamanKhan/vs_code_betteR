@@ -103,3 +103,65 @@ export function iframeCsp(nonce: string): string {
         `frame-src http://127.0.0.1:* http://localhost:*;`
     );
 }
+
+/** Tells the embedding panel which page is showing (for history and title). */
+const NAV_SCRIPT =
+    '<script>parent.postMessage({ type: "betteR-nav", url: location.href, title: document.title }, "*");</script>';
+
+/**
+ * A localhost relay in front of another local server (ark's help proxy). It
+ * keeps paths unchanged, so absolute links like `/doc/html/R.css` still work,
+ * and adds one script to HTML pages that reports navigations to the panel:
+ * the page is a cross-origin iframe, so the panel can't observe them itself.
+ */
+export class NavProxy implements vscode.Disposable {
+    private constructor(
+        private readonly server: http.Server,
+        readonly target: URL,
+        readonly port: number,
+    ) {}
+
+    static start(target: string): Promise<NavProxy> {
+        const origin = new URL(target);
+        return new Promise((resolve, reject) => {
+            const server = http.createServer((req, res) => {
+                const upstream = http.request(
+                    { host: origin.hostname, port: origin.port, path: req.url, method: req.method, headers: { ...req.headers, host: origin.host } },
+                    (up) => {
+                        const isHtml = /text\/html/i.test(String(up.headers['content-type'] ?? ''));
+                        if (!isHtml) {
+                            res.writeHead(up.statusCode ?? 502, up.headers);
+                            up.pipe(res);
+                            return;
+                        }
+                        const chunks: Buffer[] = [];
+                        up.on('data', (c: Buffer) => chunks.push(c));
+                        up.on('end', () => {
+                            const headers = { ...up.headers };
+                            delete headers['content-length'];
+                            delete headers['content-encoding'];
+                            res.writeHead(up.statusCode ?? 200, headers);
+                            res.end(Buffer.concat(chunks).toString('utf8') + NAV_SCRIPT);
+                        });
+                    },
+                );
+                upstream.on('error', () => res.writeHead(502).end());
+                req.pipe(upstream);
+            });
+            server.once('error', reject);
+            server.listen(0, '127.0.0.1', () =>
+                resolve(new NavProxy(server, origin, (server.address() as { port: number }).port)),
+            );
+        });
+    }
+
+    /** The relay's address for a URL on the target server. */
+    map(url: string): string {
+        const u = new URL(url);
+        return `http://127.0.0.1:${this.port}${u.pathname}${u.search}${u.hash}`;
+    }
+
+    dispose(): void {
+        this.server.close();
+    }
+}
