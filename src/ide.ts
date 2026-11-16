@@ -6,7 +6,7 @@ import * as vscode from 'vscode';
 export type IdeMessage = { type: string; [key: string]: unknown };
 
 /**
- * Server end of the channel to the terminal console (`betterr --ide-socket`).
+ * Server end of the channel to the terminal console (`better --ide-socket`).
  * Messages sent while no console is connected are queued and delivered when
  * one connects, so Run Selection works while the console is still starting.
  */

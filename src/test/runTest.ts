@@ -9,7 +9,7 @@ async function main(): Promise<void> {
     const extensionTestsPath = path.resolve(__dirname, './suite/index');
 
     // Work on a copy so anything R writes can't touch the repo fixture.
-    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'betterr-ws-'));
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'better-ws-'));
     fs.cpSync(path.join(extensionDevelopmentPath, 'test-fixtures/workspace'), workspace, { recursive: true });
 
     try {
@@ -28,7 +28,7 @@ async function main(): Promise<void> {
     const orphans = cp
         .execFileSync('ps', ['-ax', '-o', 'pid=,command='], { encoding: 'utf8' })
         .split('\n')
-        .filter((line) => /\/ark --connection_file \S*betterr-vscode-/.test(line));
+        .filter((line) => /\/ark --connection_file \S*better-vscode-/.test(line));
     if (orphans.length) {
         throw new Error(`ark still running after VS Code exited:\n${orphans.join('\n')}`);
     }

@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import type { BetterRApi } from '../../extension';
+import type { BetteRApi } from '../../extension';
 import type { Session } from '../../session';
 
 const workspace = () => vscode.workspace.workspaceFolders![0].uri.fsPath;
@@ -43,7 +43,7 @@ async function locals(debug: vscode.DebugSession, frameId: number): Promise<Reco
 
 /** Reads an R value by having the console write it to a temp file. */
 async function rValue(session: Session, expr: string): Promise<string> {
-    const file = path.join(os.tmpdir(), `betterr-value-${Date.now()}.txt`);
+    const file = path.join(os.tmpdir(), `better-value-${Date.now()}.txt`);
     session.execute(`writeLines(format(${expr}), ${JSON.stringify(file)})`);
     const value = await waitFor('R value', () => fs.readFileSync(file, 'utf8').trim(), (v) => v.length > 0);
     fs.rmSync(file, { force: true });
@@ -52,7 +52,7 @@ async function rValue(session: Session, expr: string): Promise<string> {
 
 const arkSession = () => (vscode.debug.activeDebugSession?.type === 'ark' ? vscode.debug.activeDebugSession : undefined);
 
-suite('betterR debugger: browser() and breakpoints in VS Code', () => {
+suite('betteR debugger: browser() and breakpoints in VS Code', () => {
     let session: Session;
     let doc: vscode.TextDocument;
     let editor: vscode.TextEditor;
@@ -71,7 +71,7 @@ suite('betterR debugger: browser() and breakpoints in VS Code', () => {
         });
         doc = await vscode.workspace.openTextDocument(path.join(workspace(), 'debug.R'));
         editor = await vscode.window.showTextDocument(doc);
-        const ext = vscode.extensions.getExtension<BetterRApi>('betterr.betterr-vscode')!;
+        const ext = vscode.extensions.getExtension<BetteRApi>('better.better-vscode')!;
         session = await (await ext.activate()).ready();
         await waitFor('console to report its debugger port', () => session.dapPort, (p) => p !== undefined);
     });
@@ -86,7 +86,7 @@ suite('betterR debugger: browser() and breakpoints in VS Code', () => {
 
     test('browser() in a function run from the editor stops VS Code on the real file line', async () => {
         editor.selection = new vscode.Selection(0, 0, 0, 0);
-        await vscode.commands.executeCommand('betterR.runSelection');
+        await vscode.commands.executeCommand('betteR.runSelection');
         assert.strictEqual(editor.selection.active.line, 5, 'Cmd+Enter runs the whole function and moves past it');
 
         session.execute('res_add_one <- add_one(1)');
@@ -118,7 +118,7 @@ suite('betterR debugger: browser() and breakpoints in VS Code', () => {
         await new Promise((r) => setTimeout(r, 1000));
 
         editor.selection = new vscode.Selection(6, 0, 6, 0);
-        await vscode.commands.executeCommand('betterR.runSelection');
+        await vscode.commands.executeCommand('betteR.runSelection');
         session.execute('res_times <- times_two(5)');
 
         const frame = await waitFor('stop at breakpoint', () => topFrame(debug!), (f) => f?.line === 8);

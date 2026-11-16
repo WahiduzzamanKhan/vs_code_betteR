@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import type { BetterRApi } from '../../extension';
+import type { BetteRApi } from '../../extension';
 import type { Session } from '../../session';
 
 const workspace = () => vscode.workspace.workspaceFolders![0].uri.fsPath;
@@ -26,19 +26,19 @@ function pngSize(base64: string): { width: number; height: number } {
     return { width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
 }
 
-suite('betterR plots: R graphics in a VS Code pane, no httpgd', () => {
+suite('betteR plots: R graphics in a VS Code pane, no httpgd', () => {
     let session: Session;
 
     suiteSetup(async () => {
         const doc = await vscode.workspace.openTextDocument(path.join(workspace(), 'analysis.R'));
         await vscode.window.showTextDocument(doc);
-        const ext = vscode.extensions.getExtension<BetterRApi>('betterr.betterr-vscode')!;
+        const ext = vscode.extensions.getExtension<BetteRApi>('better.better-vscode')!;
         session = await (await ext.activate()).ready();
     });
 
     test('a plot opens the R Plots pane, rendered at the pane size', async () => {
         const before = session.plots.plots.length;
-        session.execute('plot(1:10, main = "betterR")');
+        session.execute('plot(1:10, main = "betteR")');
         await waitFor('plot to arrive', () => session.plots.plots.length, (n) => n === before + 1);
         assert.ok(session.plots.isVisible, 'R Plots pane is shown');
         assert.ok(

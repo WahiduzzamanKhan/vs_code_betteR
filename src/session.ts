@@ -35,7 +35,7 @@ function onPath(name: string): string | undefined {
 
 /** Setting, then env var, then PATH, then the in-repo development build. */
 function resolveBinary(setting: string, envVar: string | undefined, name: string, devPath: string): string {
-    const configured = vscode.workspace.getConfiguration('betterR').get<string>(setting);
+    const configured = vscode.workspace.getConfiguration('betteR').get<string>(setting);
     const candidates = [configured, envVar ? process.env[envVar] : undefined];
     for (const c of candidates) {
         if (c) {
@@ -47,13 +47,13 @@ function resolveBinary(setting: string, envVar: string | undefined, name: string
     }
     const found = onPath(name) ?? (fs.existsSync(devPath) ? devPath : undefined);
     if (!found) {
-        throw new Error(`Could not find \`${name}\`. Set betterR.${setting}.`);
+        throw new Error(`Could not find \`${name}\`. Set betteR.${setting}.`);
     }
     return found;
 }
 
 /** Console input is mirrored into this LSP document for completion. */
-const CONSOLE_DOC_URI = 'untitled:betterr-console';
+const CONSOLE_DOC_URI = 'untitled:better-console';
 
 /** Location of `range` in `doc` with columns as UTF-8 byte offsets, as ark expects. */
 function codeLocation(doc: vscode.TextDocument, range: vscode.Range) {
@@ -161,11 +161,11 @@ export class Session implements vscode.Disposable {
         const consolePath = resolveBinary(
             'consolePath',
             undefined,
-            'betterr',
-            path.join(repo, 'console/target/debug/betterr'),
+            'better',
+            path.join(repo, 'console/target/debug/better'),
         );
 
-        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'betterr-vscode-'));
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'better-vscode-'));
         const connectionFile = path.join(dir, 'kernel.json');
         const logFile = path.join(dir, 'ark.log');
         const ideSocket = path.join(dir, 'ide.sock');
@@ -211,7 +211,7 @@ export class Session implements vscode.Disposable {
                     next(uri, uri.toString() === CONSOLE_DOC_URI ? [] : diagnostics),
             },
         };
-        const client = new LanguageClient('betterR', 'betterR (ark)', serverOptions, clientOptions);
+        const client = new LanguageClient('betteR', 'betteR (ark)', serverOptions, clientOptions);
         const session = new Session(kernel, connectionFile, logFile, dir, consolePath, cwd, client, ide, ideSocket, output);
 
         kernel.on('exit', (code, signal) => {

@@ -3,7 +3,7 @@ import { ArkDapBridge } from './dap';
 import { Session } from './session';
 
 /** Returned from `activate`; used by the integration tests. */
-export interface BetterRApi {
+export interface BetteRApi {
     ready(): Promise<Session>;
 }
 
@@ -11,10 +11,10 @@ let current: Promise<Session> | undefined;
 /** The started session, for synchronous callers (debug adapter, documents). */
 let active: Session | undefined;
 
-export function activate(context: vscode.ExtensionContext): BetterRApi {
-    const output = vscode.window.createOutputChannel('betterR', { log: true });
+export function activate(context: vscode.ExtensionContext): BetteRApi {
+    const output = vscode.window.createOutputChannel('betteR', { log: true });
     const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-    status.command = 'betterR.openConsole';
+    status.command = 'betteR.openConsole';
     context.subscriptions.push(output, status);
 
     const setStatus = (text: string, tooltip: string) => {
@@ -27,7 +27,7 @@ export function activate(context: vscode.ExtensionContext): BetterRApi {
         setStatus('$(debug-disconnect) R', 'R session ended');
         void vscode.window
             .showWarningMessage('The R session ended.', 'Restart R')
-            .then((choice) => choice && vscode.commands.executeCommand('betterR.restart'));
+            .then((choice) => choice && vscode.commands.executeCommand('betteR.restart'));
         void session.dispose();
     };
 
@@ -38,14 +38,14 @@ export function activate(context: vscode.ExtensionContext): BetterRApi {
             (session) => {
                 active = session;
                 setStatus('$(terminal) R', `R session (ark) — ${session.connectionFile}`);
-                if (vscode.workspace.getConfiguration('betterR').get<boolean>('openConsoleOnStart')) {
+                if (vscode.workspace.getConfiguration('betteR').get<boolean>('openConsoleOnStart')) {
                     session.openConsole(true);
                 }
             },
             (err: Error) => {
                 setStatus('$(error) R', err.message);
                 output.appendLine(`Failed to start R session: ${err.message}`);
-                void vscode.window.showErrorMessage(`betterR: ${err.message}`);
+                void vscode.window.showErrorMessage(`betteR: ${err.message}`);
             },
         );
         current = starting;
@@ -58,16 +58,16 @@ export function activate(context: vscode.ExtensionContext): BetterRApi {
     };
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('betterR.openConsole', async () => (await session()).openConsole()),
-        vscode.commands.registerCommand('betterR.showPlots', async () => (await session()).plots.show()),
-        vscode.commands.registerCommand('betterR.restart', async () => {
+        vscode.commands.registerCommand('betteR.openConsole', async () => (await session()).openConsole()),
+        vscode.commands.registerCommand('betteR.showPlots', async () => (await session()).plots.show()),
+        vscode.commands.registerCommand('betteR.restart', async () => {
             const old = current;
             current = undefined;
             active = undefined;
             await (await old?.catch(() => undefined))?.dispose();
             await start();
         }),
-        vscode.commands.registerCommand('betterR.runSelection', async () => {
+        vscode.commands.registerCommand('betteR.runSelection', async () => {
             const editor = vscode.window.activeTextEditor;
             if (!editor) {
                 return;

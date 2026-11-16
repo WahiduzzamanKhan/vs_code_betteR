@@ -99,7 +99,7 @@ export class PlotsPanel implements vscode.Disposable {
             return;
         }
         this.panel = vscode.window.createWebviewPanel(
-            'betterR.plots',
+            'betteR.plots',
             'R Plots',
             { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
             { enableScripts: true, retainContextWhenHidden: true },

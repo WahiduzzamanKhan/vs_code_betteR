@@ -3,7 +3,7 @@ import * as cp from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import type { BetterRApi } from '../../extension';
+import type { BetteRApi } from '../../extension';
 import type { Session } from '../../session';
 
 const workspace = () => vscode.workspace.workspaceFolders![0].uri.fsPath;
@@ -55,7 +55,7 @@ async function waitFor<T>(what: string, probe: () => Promise<T>, ok: (v: T) => b
     assert.fail(`timed out waiting for ${what}; last value: ${JSON.stringify(last)}`);
 }
 
-suite('betterR: one live R session shared by console and editor', () => {
+suite('betteR: one live R session shared by console and editor', () => {
     let packagesBefore: string;
     let doc: vscode.TextDocument;
     let session: Session;
@@ -65,7 +65,7 @@ suite('betterR: one live R session shared by console and editor', () => {
 
         doc = await vscode.workspace.openTextDocument(path.join(workspace(), 'analysis.R'));
         await vscode.window.showTextDocument(doc);
-        const ext = vscode.extensions.getExtension<BetterRApi>('betterr.betterr-vscode')!;
+        const ext = vscode.extensions.getExtension<BetteRApi>('better.better-vscode')!;
         session = await (await ext.activate()).ready();
     });
 
@@ -103,7 +103,7 @@ suite('betterR: one live R session shared by console and editor', () => {
     test('Run Selection sends editor code to the console session', async () => {
         const editor = await vscode.window.showTextDocument(doc);
         editor.selection = new vscode.Selection(1, 0, 1, 0);
-        await vscode.commands.executeCommand('betterR.runSelection');
+        await vscode.commands.executeCommand('betteR.runSelection');
         // The name is built at runtime, so only the live session can know it.
         await waitFor(
             'runtime-only symbol from Run Selection',
