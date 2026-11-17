@@ -167,15 +167,20 @@ export class Session implements vscode.Disposable {
         output: vscode.LogOutputChannel,
         onUnexpectedExit: (session: Session) => void,
     ): Promise<Session> {
-        // Dev layout: betteR (console), betteR_mvp (ark build) and this repo side by side.
-        const siblings = path.resolve(context.extensionPath, '..');
-        const ark = resolveBinary('arkPath', 'ARK_PATH', 'ark', path.join(siblings, 'betteR_mvp/vendor/ark/target/debug/ark'));
+        // `better` is the console and, in `--kernel` mode, the R kernel (ark is
+        // built in). Dev layout: the betteR repo next to this one.
         const consolePath = resolveBinary(
             'consolePath',
             undefined,
             'better',
-            path.join(siblings, 'betteR/target/debug/better'),
+            path.join(path.resolve(context.extensionPath, '..'), 'betteR/target/debug/better'),
         );
+        // Optional: a separate ark build instead of the built-in kernel.
+        const arkOverride = vscode.workspace.getConfiguration('betteR').get<string>('arkPath');
+        if (arkOverride && !fs.existsSync(arkOverride)) {
+            throw new Error(`ark not found at ${arkOverride}`);
+        }
+        const [kernelCommand, kernelArgs] = arkOverride ? [arkOverride, []] : [consolePath, ['--kernel']];
 
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'better-vscode-'));
         const connectionFile = path.join(dir, 'kernel.json');
@@ -199,11 +204,11 @@ export class Session implements vscode.Disposable {
         const htmlServer = await HtmlServer.start();
 
         const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        output.appendLine(`Starting ark: ${ark}`);
+        output.appendLine(`Starting R kernel: ${[kernelCommand, ...kernelArgs].join(' ')}`);
         output.appendLine(`Connection file: ${connectionFile}`);
         const kernel = cp.spawn(
-            ark,
-            ['--connection_file', connectionFile, '--session-mode', 'console', '--log', logFile],
+            kernelCommand,
+            [...kernelArgs, '--connection_file', connectionFile, '--session-mode', 'console', '--log', logFile],
             { cwd: cwd ?? os.homedir(), stdio: 'ignore' },
         );
 
