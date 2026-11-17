@@ -36,7 +36,7 @@ function onPath(name: string): string | undefined {
     return undefined;
 }
 
-/** Setting, then env var, then PATH, then the in-repo development build. */
+/** Setting, then env var, then PATH, then a development build in a sibling checkout. */
 function resolveBinary(setting: string, envVar: string | undefined, name: string, devPath: string): string {
     const configured = vscode.workspace.getConfiguration('betteR').get<string>(setting);
     const candidates = [configured, envVar ? process.env[envVar] : undefined];
@@ -167,13 +167,14 @@ export class Session implements vscode.Disposable {
         output: vscode.LogOutputChannel,
         onUnexpectedExit: (session: Session) => void,
     ): Promise<Session> {
-        const repo = path.resolve(context.extensionPath, '..');
-        const ark = resolveBinary('arkPath', 'ARK_PATH', 'ark', path.join(repo, 'vendor/ark/target/debug/ark'));
+        // Dev layout: betteR (console), betteR_mvp (ark build) and this repo side by side.
+        const siblings = path.resolve(context.extensionPath, '..');
+        const ark = resolveBinary('arkPath', 'ARK_PATH', 'ark', path.join(siblings, 'betteR_mvp/vendor/ark/target/debug/ark'));
         const consolePath = resolveBinary(
             'consolePath',
             undefined,
             'better',
-            path.join(repo, 'console/target/debug/better'),
+            path.join(siblings, 'betteR/target/debug/better'),
         );
 
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'better-vscode-'));

@@ -73,12 +73,12 @@
         "betteR.arkPath": {
           "type": "string",
           "default": "",
-          "description": "Path to the ark binary. Empty: $ARK_PATH, then `ark` on PATH, then the repo's development build."
+          "description": "Path to the ark binary. Empty: $ARK_PATH, then `ark` on PATH, then ../betteR_mvp/vendor/ark/target/debug/ark."
         },
         "betteR.consolePath": {
           "type": "string",
           "default": "",
-          "description": "Path to the better console binary. Empty: `better` on PATH, then the repo's development build."
+          "description": "Path to the better console binary. Empty: `better` on PATH, then ../betteR/target/debug/better."
         },
         "betteR.openConsoleOnStart": {
           "type": "boolean",
