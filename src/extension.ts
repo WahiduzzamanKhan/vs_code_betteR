@@ -99,6 +99,13 @@ export function activate(context: vscode.ExtensionContext): BetteRApi {
         vscode.commands.registerCommand('betteR.env.showHidden', () => explorer.setShowHidden(true)),
         vscode.commands.registerCommand('betteR.env.hideHidden', () => explorer.setShowHidden(false)),
         vscode.commands.registerCommand('betteR.env.remove', (node: EnvNode) => node && explorer.remove([node])),
+        vscode.commands.registerCommand('betteR.env.viewData', async (node: EnvNode) => {
+            try {
+                await explorer.view(node);
+            } catch (err) {
+                void vscode.window.showErrorMessage(`betteR: ${(err as Error).message}`);
+            }
+        }),
         vscode.commands.registerCommand('betteR.env.print', async (node: EnvNode) => {
             const expr = node && rExpression(node);
             if (expr) {

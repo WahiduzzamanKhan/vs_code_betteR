@@ -14,6 +14,7 @@ VS Code extension ── spawns `better --kernel` (ark built in), owns kernel.js
    ├─ R Viewer        ── localhost file server ◄── show_html_file / show_url ── console ◄── ark UI comm
    ├─ R Help          ── localhost relay ──► ark help proxy ◄── show_help ── console ◄── ark help comm
    ├─ R Session views ◄── variables_event / comm_rpc ── ide.sock ── console ──► ark variables + UI comms
+   ├─ Data explorer   ◄── comm_open / comm_event / comm_rpc ── ide.sock ── console ──► ark data explorer comms
    └─ terminal "R"    ── better -f kernel.json --ide-socket ide.sock ──► ark Jupyter (the console; holds ark's debugger comm)
 ```
 
@@ -28,6 +29,7 @@ VS Code extension ── spawns `better --kernel` (ark built in), owns kernel.js
 - **Interactive output comes from ark's UI comm.** Ark overrides `print.htmlwidget`, `options(viewer)`, `options(browser)` and `shiny.launch.browser`. It writes widgets to R's tempdir and sends `show_html_file {path, title, destination}`, or sends `show_url {url}` for web apps. The console forwards these over `ide.sock`, also while you're typing. The extension serves each widget's folder from a localhost server under a random token (only registered folders are reachable) and shows it in an iframe. `asExternalUri` keeps this working over remote connections.
 - **Help comes from ark's help comm.** Opening it starts R's help server and ark's help proxy; each request becomes `show_help {url}`. F1 asks ark's LSP for the topic at the cursor (`positron/textDocument/helpTopic`), then asks the help comm to show it (`show_help_topic`). The help page is a cross-origin iframe, so the panel loads it through a small localhost relay. The relay keeps paths unchanged, so R's absolute links work, and appends one script that reports each page's URL and title. That's what makes Back/Forward include links you followed. The relay also themes the pages: the panel reads its `--vscode-*` theme values (the iframe is cross-origin and can't), and the relay puts them, with a stylesheet overriding R.css, at the top of each page's `<head>`, so pages load already themed. When the theme changes, the panel sends the new values to the page's injected listener.
 - **The environment explorer uses ark's variables comm and UI comm.** In hosted mode the console opens `positron.variables`. After each execution ark sends a `refresh` (full list) or `update` (diff) for the global env, or for the debug frame while paused, and serves `inspect` (children of a path of access keys), `delete` and `clear`. The console relays these as `variables_event`, and the extension sends `comm_rpc` requests and gets `comm_rpc_reply` back. Ark's list leaves out hidden objects, the search path and loaded namespaces, so those come from silent `evaluate_code` requests on the UI comm: R code runs in the global env with no console echo, and the value returns as JSON. Those requests run after each `prompt_state` (which the console forwards), and only while one of the views is visible. Ark answers comm requests only when R is idle, so a long computation just delays the refresh. Removing an object doesn't make ark send an update, so the extension re-lists afterwards. The views live in a `viewsContainers.secondarySidebar` container, which needs VS Code 1.106.
+- **The data explorer uses ark's data explorer comm**, the backend of Positron's Data Explorer. `View(df)` (ark replaces `utils::View`) and the variables comm's `view` request make ark open a `positron.dataExplorer` comm. The console forwards it as `comm_open`, forwards its `schema_update` / `data_update` events as `comm_event`, and reports its closing (the variable was removed) as `comm_closed`. The extension sends its requests by comm id over `comm_rpc` and closes the comm when the tab closes. Ark keeps the table and applies sorting and filters itself, so the webview's grid stays virtual: it requests values in blocks of 100 rows × 20 columns for what's on screen (`get_data_values`, plus `get_row_labels` for row names), and drops its cache whenever the view changes. Values arrive formatted; NA, NaN and Inf arrive as special codes. Search across all cells is a `global_search` row filter, and copying uses `export_data_selection`. The grid redraws as soon as data arrives rather than on an animation frame, because an unfocused window throttles frames almost to a stop.
 - **Lifecycle.** The extension owns ark. Closing the console only detaches it. `q()` in the console ends the session, and the extension offers *Restart R*. On window close, ark is stopped and its temp dir removed. If ark crashes, its log is kept and its path is written to the *betteR* output channel.
 
 ## What the tests cover
@@ -71,4 +73,13 @@ These tests use a hand-built page laid out like an htmlwidget, so no R packages 
 2. While R is paused at `browser()`, *Environment* shows the frame's local variables; after `Q` it's back to the global env.
 3. *Attached* lists `library()`-attached packages with versions and expands `package:stats` to its objects. *Loaded Namespaces* marks `base` as attached with its version, and *Session* shows the R version.
 4. A hidden `.name` object shows only with *Show Hidden Objects*, expands into its elements, and *Remove* deletes it.
+
+**Data explorer:**
+1. `View(df)` opens an editor tab named after the data frame, and the webview's grid fetches and draws its first cells.
+2. Values arrive a block at a time, including across the 100-row block boundary, with NA as a special value.
+3. Sorting reorders rows (and the grid redraws), a column filter and a global search narrow them, and clearing restores all 250.
+4. Selected cells export as TSV (with column names) or CSV, and Copy puts them on the clipboard.
+5. Changing the data frame updates the tab, and `View()` again reuses it on a new comm.
+6. *View Data* in the Environment view opens `head(mtcars)` with its row names.
+7. `rm()` of the variable marks the tab as closed.
 

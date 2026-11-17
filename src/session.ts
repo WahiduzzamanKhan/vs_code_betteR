@@ -7,6 +7,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { LanguageClient, LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node';
 import { IdeChannel, IdeMessage } from './ide';
+import { DataExplorers } from './dataExplorer';
 import { HelpPanel } from './help';
 import { HtmlServer, isLocalUrl } from './htmlServer';
 import { PlotImage, PlotsPanel } from './plots';
@@ -96,6 +97,7 @@ export class Session implements vscode.Disposable {
     readonly plots: PlotsPanel;
     readonly viewer = new ViewerPanel();
     readonly help = new HelpPanel();
+    readonly dataExplorers: DataExplorers;
     private nextHelpId = 1;
     private readonly pendingHelp = new Map<number, (found: boolean) => void>();
     private nextRenderId = 1;
@@ -138,12 +140,17 @@ export class Session implements vscode.Disposable {
             setPlotSize: (size, pixelRatio) => ide.send({ type: 'plot_settings', size, pixel_ratio: pixelRatio }),
             closePlot: (commId) => ide.send({ type: 'plot_close', comm_id: commId }),
         });
+        this.dataExplorers = new DataExplorers({
+            rpc: (commId, method, params) => this.commRpc({ id: commId }, method, params, 60_000),
+            close: (commId) => ide.send({ type: 'comm_close', comm_id: commId }),
+        });
         this.disposables.push(
             ide,
             htmlServer,
             this.plots,
             this.viewer,
             this.help,
+            this.dataExplorers,
             this.variablesEvents,
             this.promptStates,
             ide.onMessage((msg) => this.onIdeMessage(msg)),
@@ -298,6 +305,18 @@ export class Session implements vscode.Disposable {
                 this.pendingHelp.get(msg.id as number)?.(msg.found as boolean);
                 this.pendingHelp.delete(msg.id as number);
                 break;
+            case 'comm_open':
+                if (msg.target === 'positron.dataExplorer') {
+                    const data = msg.data as { title?: string } | null;
+                    this.dataExplorers.open(msg.comm_id as string, data?.title || 'Data');
+                }
+                break;
+            case 'comm_event':
+                this.dataExplorers.onEvent(msg.comm_id as string, msg.method as string);
+                break;
+            case 'comm_closed':
+                this.dataExplorers.onClosed(msg.comm_id as string);
+                break;
             case 'variables_event':
                 this.variablesEvents.fire({ method: msg.method as string, params: msg.params });
                 break;
@@ -408,10 +427,15 @@ export class Session implements vscode.Disposable {
 
     /**
      * A JSON-RPC request on one of ark's comms held by the console: the
-     * variables comm (`list`, `inspect`, `delete`, `clear`) or the UI comm
-     * (`evaluate_code`). Answered once R is idle.
+     * variables comm (`list`, `inspect`, `delete`, `clear`, `view`), the UI
+     * comm (`evaluate_code`) or a data explorer (`{ id }`). Answered once R is idle.
      */
-    commRpc<T = unknown>(comm: 'variables' | 'ui', method: string, params?: object, timeoutMs = 15_000): Promise<T> {
+    commRpc<T = unknown>(
+        comm: 'variables' | 'ui' | { id: string },
+        method: string,
+        params?: object,
+        timeoutMs = 15_000,
+    ): Promise<T> {
         const id = this.nextRpcId++;
         return new Promise<T>((resolve, reject) => {
             const timer = setTimeout(() => {
@@ -422,7 +446,8 @@ export class Session implements vscode.Disposable {
                 resolve: (result) => (clearTimeout(timer), resolve(result as T)),
                 reject: (err) => (clearTimeout(timer), reject(err)),
             });
-            this.ide.send({ type: 'comm_rpc', id, comm, method, params });
+            const target = typeof comm === 'string' ? { comm } : { comm_id: comm.id };
+            this.ide.send({ type: 'comm_rpc', id, ...target, method, params });
         });
     }
 

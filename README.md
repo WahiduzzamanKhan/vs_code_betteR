@@ -16,6 +16,7 @@ It works in standard VS Code and needs nothing installed into your R library: no
 - **Interactive charts and apps:** plotly, leaflet and other htmlwidgets run live in the plots panel; DT tables, other widgets and Shiny apps run in an *R Viewer* panel.
 - **Help pages:** `?mean`, `help()` and `??search` open in an *R Help* panel with Back/Forward. **F1** on a function in your script shows its help.
 - **Environment explorer:** an *R Session* side bar on the right lists the objects in your session (or in the debug frame while paused), expandable into columns, list elements and slots. It also shows the attached packages, loaded namespaces and session info, all updated after every command.
+- **Data explorer:** `View(df)` opens a data frame in an editor tab: a fast grid for tables of any size, with sorting, filters, search across all cells and copying to the clipboard. It stays in sync as the data frame changes.
 
 ## Requirements
 
@@ -94,6 +95,18 @@ The **R Session** container in the secondary side bar (on the right, next to Cha
 - **Session:** R version, platform, working directory, memory used by the R process, and counts.
 
 Right-click an object to **Print in Console**, **Show Structure (str)** or **Copy** its name, or to **Remove** it (with confirmation). Print and str run in the console as if typed, so they go into history. Hidden objects are read from the global environment only.
+
+### Data explorer
+
+`View(df)` in the console or a script opens the data frame in an editor tab named after it. So does the **View Data** button (table icon) next to a data frame in the *Environment* view, which also works for data frames inside lists. Running `View(df)` again reuses the tab.
+
+- **Scroll** through any number of rows and columns; values are loaded as you scroll. Row names appear on the left, and missing values show as *NA*.
+- **Sort:** click a column header to sort ascending, again for descending, and a third time to clear. Shift-click adds more sort columns. **Clear Sort** restores the original order.
+- **Filter:** **+ Filter**, or the ⏷ button on a column header, adds a row filter. Number and date columns offer comparisons, *between* and *is NA*. Text columns offer *contains*, *starts with*, regex and more. Filters appear as chips above the grid; click ✕ to remove one. Invalid filters, such as text compared with a number column, are shown in red.
+- **Search:** the search box keeps rows where any cell contains the text.
+- **Copy:** select cells by clicking and dragging or with Shift+arrow keys. Click a row name to select whole rows, Cmd/Ctrl-click a header to select a column, or press Cmd/Ctrl+A for everything. Then press **Cmd/Ctrl+C** or **Copy** for tab-separated text (pastes into spreadsheets), or **Copy as CSV**. Multi-cell copies include the column names.
+
+The tab updates when the data frame changes, and says so if it's removed. Sorting and filtering only affect the view, never your data.
 
 ### Commands
 

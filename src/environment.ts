@@ -382,6 +382,14 @@ export class EnvironmentExplorer implements vscode.Disposable {
     }
 
     /** Removes objects from the environment shown (the debug frame while paused). */
+    /** Opens a data frame (or other table) in the data explorer. */
+    async view(node: EnvNode): Promise<void> {
+        if (node.type !== 'var' || !this.session) {
+            return;
+        }
+        await this.session.commRpc('variables', 'view', { path: node.path });
+    }
+
     async remove(nodes: EnvNode[]): Promise<void> {
         const names = nodes.flatMap((n) => (n.type === 'var' && n.path.length === 1 ? [n.variable.access_key] : []));
         if (!names.length || !this.session) {
@@ -529,7 +537,7 @@ export class EnvironmentExplorer implements vscode.Disposable {
                     tooltip.appendCodeblock(v.display_value + (v.is_truncated ? ' …' : ''), 'r');
                 }
                 item.tooltip = tooltip;
-                item.contextValue = node.path.length === 1 ? 'rTopVariable' : 'rChildVariable';
+                item.contextValue = (node.path.length === 1 ? 'rTopVariable' : 'rChildVariable') + (v.kind === 'table' ? 'Table' : '');
                 return item;
             }
             case 'search': {
