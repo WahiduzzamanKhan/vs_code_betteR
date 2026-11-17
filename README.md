@@ -20,13 +20,13 @@ It works in standard VS Code and needs nothing installed into your R library: no
 
 - **VS Code 1.91** or newer.
 - **R**, installed normally. Tested with R 4.3 and 4.6.
-- **The `better` console**, from the betteR repository. It contains the R engine ([ark](https://github.com/posit-dev/ark)) that the extension uses. It must be on your `PATH`, or set in `betteR.consolePath`.
+- **The `better` console**, from [betteR](https://github.com/WahiduzzamanKhan/betteR). It contains the R engine ([ark](https://github.com/posit-dev/ark)) that the extension uses. It must be on your `PATH`, or set in `betteR.consolePath`.
 - **macOS or Linux.** Windows is not supported yet. betteR has been tested on macOS.
 - **To build from source:** Node.js 20 or newer with npm.
 
 ## Installation
 
-1. **Install the `better` console** by following the betteR repository's README (`cargo install --path .`). Check it with:
+1. **Install the `better` console** by following the [betteR README](https://github.com/WahiduzzamanKhan/betteR#installation) (`cargo install --path .`). Check it with:
 
    ```sh
    better --version
@@ -35,7 +35,7 @@ It works in standard VS Code and needs nothing installed into your R library: no
 2. **Build and install the extension:**
 
    ```sh
-   git clone <this repository> vs_code_betteR
+   git clone https://github.com/WahiduzzamanKhan/vs_code_betteR.git
    cd vs_code_betteR
    npm install
    npm run package
@@ -122,8 +122,11 @@ npm test            # integration tests in a real VS Code (downloaded on first r
 
 Open this folder in VS Code and press **F5** to start a development window with a sample workspace (`test-fixtures/workspace`). The development build looks for `better` on your `PATH`, then in `../betteR/target/debug/better`.
 
-Commits follow [Conventional Commits](https://www.conventionalcommits.org). Architecture and design notes are in `docs/design.md`.
+Commits follow [Conventional Commits](https://www.conventionalcommits.org). Architecture and design notes are in [docs/design.md](docs/design.md).
 
-## Credits
+## License and credits
+
+betteR for VS Code is released under the [MIT License](LICENSE).
+
 
 betteR is built on [ark](https://github.com/posit-dev/ark) by Posit Software, PBC (MIT licence).
