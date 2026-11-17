@@ -1,0 +1,10 @@
+# Keep the VSIX to the compiled extension and its runtime dependencies.
+.vscode/**
+.vscode-test/**
+src/**
+out/test/**
+**/*.map
+test-fixtures/**
+docs/**
+tsconfig.json
+.gitignore

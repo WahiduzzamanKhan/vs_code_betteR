@@ -5,3 +5,5 @@ node_modules/
 /test-fixtures/workspace/.vscode/
 *.log
 .DS_Store
+
+*.vsix

@@ -105,7 +105,8 @@
   "scripts": {
     "compile": "tsc -p .",
     "watch": "tsc -p . --watch",
-    "test": "npm run compile && node ./out/test/runTest.js"
+    "test": "npm run compile && node ./out/test/runTest.js",
+    "package": "npm run compile && vsce package --allow-missing-repository --skip-license -o better-vscode.vsix"
   },
   "dependencies": {
     "vscode-languageclient": "^11.0.0"
@@ -115,6 +116,7 @@
     "@types/node": "^22.20.5",
     "@types/vscode": "~1.91.0",
     "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^4.1.1",
     "mocha": "^11.8.0",
     "typescript": "^7.0.2"
   }
