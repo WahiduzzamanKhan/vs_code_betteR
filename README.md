@@ -1,107 +1,129 @@
-# betteR VS Code extension
+# betteR for VS Code
 
-Runs **one** ark R session per window and connects every view to it:
+**RStudio-class R development in plain VS Code. No fork, and no R packages in your project.**
 
-```
-VS Code extension ── spawns `better --kernel` (ark built in), owns kernel.json, listens on ide.sock
-   ├─ language client ── better --lsp-stdio -f kernel.json ──► ark LSP   (completion, hover, statement ranges, virtual docs)
-   ├─ debugger        ── in-process bridge ─────────────────► ark DAP   (port reported by the console)
-   ├─ R Plots pane    ── render requests ── ide.sock ── console ──► ark graphics device (positron.plot comms)
-   ├─ R Viewer        ── localhost file server ◄── show_html_file / show_url ── console ◄── ark UI comm
-   ├─ R Help          ── localhost relay ──► ark help proxy ◄── show_help ── console ◄── ark help comm
-   └─ terminal "R"    ── better -f kernel.json --ide-socket ide.sock ──► ark Jupyter (the console; holds ark's debugger comm)
-```
+betteR runs **one live R session** per VS Code window and connects every part of VS Code to it. The console in the terminal, completion in the editor, the debugger, plots and help all see the same objects. Create `y <- mtcars` in the console, type `y$` in a script, and the editor completes the columns.
 
-- **Shared session.** Run `y <- mtcars` in the console, type `y$` in an `.R` file, and the editor completes the live columns.
-- **Debugging.** `browser()` and gutter breakpoints stop VS Code's debugger on the real file line, with the variables pane filled in. Step and Continue work from the toolbar or by typing `n` and `c` in the console.
-- **Plots without `httpgd`.** Plots appear in an *R Plots* pane, re-rendered by ark at the pane's exact size and pixel ratio. The pane keeps a history and saves to PNG or SVG.
-- **Interactive output.** Plot-like htmlwidgets (plotly, leaflet, …) run live in the *R Plots* history. Other widgets (DT tables, …), `viewer` output and local web apps (Shiny, plumber) run live in an *R Viewer* panel. External URLs open in your browser.
-- **Help pages.** `?topic`, `help()`, `??search` and package indexes open in an *R Help* panel with Back/Forward. **F1** in an `.R` file shows help for the symbol at the cursor, as in RStudio.
-- **Nothing is installed** into the R library, and no project files change.
+It works in standard VS Code and needs nothing installed into your R library: no `languageserver`, `httpgd` or other helper packages, so your `renv.lock` stays clean.
 
-## Try it
+## Features
 
-Prerequisites: R, and the `better` binary from the sibling repo [betteR](../betteR) (`better` on `PATH`, or `../betteR/target/debug/better`). `better` includes the R kernel (ark), so nothing else is needed; rebuild it after pulling.
+- **A modern R console** in VS Code's terminal: syntax highlighting, Tab completion from the live session, multi-line editing, history search, `readline()` prompts and Ctrl-C interrupts.
+- **Live-session editor intelligence:** completion (including data frame columns and functions you've defined), signature help and hover help, from the same session as the console.
+- **Run code RStudio-style:** **Cmd+Enter** (Ctrl+Enter on Linux) runs the whole statement at the cursor (a function definition, a pipe chain) or the selection, then moves to the next statement.
+- **Real debugging:** `browser()`, `debug()` and gutter breakpoints stop in VS Code's debugger on the actual line of your file, with the variables pane, call stack and step buttons. You can also step by typing `n` or `c` in the console.
+- **Plots without httpgd:** an *R Plots* panel shows every plot sharp at its exact size, re-rendered when you resize the panel. It has history, Save as PNG/SVG, Remove and Clear.
+- **Interactive charts and apps:** plotly, leaflet and other htmlwidgets run live in the plots panel; DT tables, other widgets and Shiny apps run in an *R Viewer* panel.
+- **Help pages:** `?mean`, `help()` and `??search` open in an *R Help* panel with Back/Forward. **F1** on a function in your script shows its help.
 
-```sh
-npm install && npm run compile
-code --extensionDevelopmentPath="$PWD" --disable-extension reditorsupport.r /path/to/an/R/project
-```
+## Requirements
 
-You can also open this folder in VS Code and press **F5**, which opens the bundled `test-fixtures/workspace` with `analysis.R` and `debug.R`.
+- **VS Code 1.91** or newer.
+- **R**, installed normally. Tested with R 4.3 and 4.6.
+- **The `better` console**, from the betteR repository. It contains the R engine ([ark](https://github.com/posit-dev/ark)) that the extension uses. It must be on your `PATH`, or set in `betteR.consolePath`.
+- **macOS or Linux.** Windows is not supported yet. betteR has been tested on macOS.
+- **To build from source:** Node.js 20 or newer with npm.
 
-In the new window, open any `.R` file. The R session starts and an **R** terminal opens with the console.
+## Installation
+
+1. **Install the `better` console** by following the betteR repository's README (`cargo install --path .`). Check it with:
+
+   ```sh
+   better --version
+   ```
+
+2. **Build and install the extension:**
+
+   ```sh
+   git clone <this repository> vs_code_betteR
+   cd vs_code_betteR
+   npm install
+   npm run package
+   code --install-extension better-vscode.vsix
+   ```
+
+3. **Disable REditorSupport** (`reditorsupport.r`, the "R" extension) if you have it. It runs its own R language server that would compete with betteR's. In the Extensions view, choose *Disable (Workspace)* for projects where you use betteR, or disable it entirely.
+
+4. **Reload VS Code.**
+
+To update, pull the latest changes, run `npm run package` again and reinstall the `.vsix`. To uninstall, run `code --uninstall-extension better.better-vscode`.
+
+## Usage
+
+Open a folder and then any `.R` file. betteR starts an R session in the folder and opens an **R** terminal with the console. The **R** item in the status bar shows the session's state and reopens the console.
+
+### Running code
 
 | Action | How |
 |---|---|
-| Run the statement at the cursor (a whole function definition, a pipe chain, …) or the selection | **Cmd+Enter** (Ctrl+Enter); the cursor moves past it |
-| Debug with `browser()` | Put `browser()` in a function, run the function with Cmd+Enter, and call it. VS Code stops on that line. |
-| Debug with breakpoints | Click the gutter, re-run the function definition with Cmd+Enter, and call it |
-| Step / continue / stop | Debug toolbar (F10, F11, F5, Shift+F5), or `n`, `s`, `c`, `Q` in the console; both stay in sync. Stepping from the console keeps keyboard focus in the console while the editor follows the current line. |
-| Plots | Shown automatically in *R Plots*. Use ◀ ▶ for history, *Save…* for PNG or SVG, *Remove* to drop a plot and *Clear* to remove them all (asks first; also *betteR: Clear All Plots*). Reopen with *betteR: Show Plots*. |
-| Help | `?mean`, `help("lm")`, `??regression` in the console, or **F1** on a symbol in the editor (*betteR: Help for Symbol at Cursor*). Links work inside the panel; ◀ ▶ go back and forward. |
-| Interactive charts and apps | Just print the widget or run the app. Plot-like widgets join the *R Plots* history (*Open in Browser* instead of *Save…*); the rest appear in *R Viewer* (*Reload*, *Open in Browser*). Reopen with *betteR: Show Viewer*. |
-| Open or reopen the console | Status bar **R** item, or *betteR: Open R Console* |
+| Run the statement at the cursor, or the selection | **Cmd+Enter** (macOS) / **Ctrl+Enter** |
+| Type directly into R | The **R** terminal |
+| Open or reopen the console | Click **R** in the status bar, or *betteR: Open R Console* |
 | Restart R | *betteR: Restart R Session* |
-| Detach the console without killing R | Ctrl-D in the terminal, then reopen it from the status bar |
+| Detach the console but keep R running | Ctrl-D in the terminal; reopen it from the status bar |
 
-Breakpoints apply to code R learns about with a file location, which means code run with Cmd+Enter. Code run with `source()` uses R's own srcrefs. Functions you type directly in the console have no file, so they are shown from a read-only `ark:` virtual document.
+Code you run appears in the console exactly as if you'd typed it, and goes into its history.
 
-Disable **REditorSupport (`reditorsupport.r`)** in windows where you use betteR, because it registers a competing R language server.
+### Debugging
+
+1. Put `browser()` in a function, or click in the gutter to set a breakpoint.
+2. Run the function definition with **Cmd+Enter**, so R knows which file and line it came from.
+3. Call the function. VS Code stops on the line, with variables and the call stack in the Run and Debug view.
+
+Step with the debug toolbar (**F10** step over, **F11** step into, **F5** continue, **Shift+F5** stop), or type `n`, `s`, `c` or `Q` in the console. Stepping from the console keeps your cursor in the console while the editor follows along. Functions you typed straight into the console have no file, so VS Code shows them in a read-only copy.
+
+### Plots, widgets and apps
+
+- **Plots** open in the *R Plots* panel beside the editor. Use **◀ ▶** to move through history, **Save…** for PNG or SVG, **Remove** for the current plot and **Clear** for all of them. Resize the panel and the plot is redrawn to fit.
+- **htmlwidgets that are charts** (plotly, leaflet, …) appear live in the same history.
+- **Other widgets** (DT tables, …), `viewer` output and **local apps** such as Shiny open in the *R Viewer* panel, with **Reload** and **Open in Browser**.
+- **External links** from R (`browseURL("https://…")`) open in your browser.
+
+### Help
+
+Type `?mean`, `help("lm")`, `??regression` or `help(package = "stats")` in the console, or press **F1** on a function name in a script. Help opens in the *R Help* panel; links work, and **◀ ▶** go back and forward.
+
+### Commands
+
+All commands are in the Command Palette under **betteR**:
+
+| Command | Default key |
+|---|---|
+| Open R Console | |
+| Run Selection or Line in R Console | Cmd+Enter / Ctrl+Enter (in `.R` files) |
+| Help for Symbol at Cursor | F1 (in `.R` files) |
+| Show Plots | |
+| Clear All Plots | |
+| Show Viewer | |
+| Restart R Session | |
 
 ### Settings
 
-- `betteR.arkPath`: optional separate ark binary to run R instead of the kernel built into `better`. Leave empty normally.
-- `betteR.consolePath`: better binary. If empty: `better` on `PATH`, then the repo's dev build.
-- `betteR.openConsoleOnStart` (default `true`).
+| Setting | Default | Description |
+|---|---|---|
+| `betteR.consolePath` | *(empty)* | Path to the `better` binary. If empty, `better` on your `PATH` is used. |
+| `betteR.openConsoleOnStart` | `true` | Open the R terminal when the session starts. |
+| `betteR.arkPath` | *(empty)* | Advanced: use a separate ark build instead of the one inside `better`. |
 
-## Test
+## Troubleshooting
+
+- **"Could not find `better`"**: install the console and make sure `better --version` works in a terminal. If VS Code was started from the Dock and doesn't see your shell's `PATH`, set `betteR.consolePath` to the full path, for example `~/.cargo/bin/better`.
+- **Duplicate completions or errors from another R language server**: disable REditorSupport (see Installation).
+- **"The R session ended"**: R crashed or you ran `q()`. Choose *Restart R* in the notification. Session logs are listed in the *betteR* output channel (*View › Output*, then pick *betteR*).
+- **A breakpoint doesn't stop**: re-run the function definition with Cmd+Enter after setting the breakpoint, so R picks it up.
+
+## Development
 
 ```sh
-npm test    # downloads a VS Code build into .vscode-test/ on first run
+npm install
+npm run compile
+npm test            # integration tests in a real VS Code (downloaded on first run)
 ```
 
-The tests open a copy of `test-fixtures/workspace` in a real VS Code with other extensions disabled.
+Open this folder in VS Code and press **F5** to start a development window with a sample workspace (`test-fixtures/workspace`). The development build looks for `better` on your `PATH`, then in `../betteR/target/debug/better`.
 
-**Shared session (Phase 2):**
-1. The console terminal opens attached to the session.
-2. `y <- mtcars` typed into the console makes `y$` complete `mpg, cyl, hp, carb` in the editor.
-3. Hover on `mean` shows the R help page.
-4. *Run Selection* runs code in the console that creates a name only the live session can know, and the editor then completes it.
-5. The installed R package set and all project files, including `renv.lock`, are unchanged.
+Commits follow [Conventional Commits](https://www.conventionalcommits.org). Architecture and design notes are in `docs/design.md`.
 
-**Debugger (Phase 3):**
-1. Cmd+Enter on line 1 of `add_one` runs the whole function. Calling it stops VS Code at `browser()` on `debug.R:3`, the real file and not a copy. VS Code focuses that frame, the variables pane shows `x = 1, y = 2`, Step Over moves to line 4, and Continue finishes with the right result (`4`).
-2. A gutter breakpoint on `debug.R:8` stops `times_two(5)` there, with `v = 5`, and Continue returns `10`.
-3. A function typed straight into the console stops in an `ark:` virtual document whose text VS Code can open.
+## Credits
 
-**Plots (Phase 4):**
-1. `plot()` opens the *R Plots* pane. The pane reports its size, and the plot is re-rendered to exactly that size × pixel ratio, replacing the 640×400 pre-render.
-2. Plots render on demand at any size as PNG (checked pixel-exact) or SVG.
-3. `lines()` updates the current plot in place instead of adding a history entry.
-4. A new plot is added to the history, earlier plots can be shown again, and removing a plot makes ark free it.
-
-**Help:**
-1. `?mean` typed into the console opens *R Help*, and the page itself loads in the panel.
-2. Back and Forward move between `?mean` and `help("lm")`.
-3. `??regression` shows search results, and `help(package = "stats")` shows the package index.
-4. F1 on `mean(` in the editor shows `mean`'s page; an unknown symbol reports that no help was found.
-
-**Interactive output:**
-1. A plot-like htmlwidget joins the *R Plots* history as a live page, and its JavaScript, including a dependency loaded from its `*_files/` folder, runs inside the pane.
-2. `viewer` output runs live in *R Viewer*.
-3. `browseURL()` on a local app (how Shiny launches) shows the app in *R Viewer* and loads it.
-
-These tests use a hand-built page laid out like an htmlwidget, so no R packages are needed. Real plotly and DT were checked by hand from a throwaway library: plotly arrives with destination `plot` and DT with `viewer`, each as `index.html` plus a `lib/` folder.
-
-## Design notes
-
-- **No ZeroMQ in Node.** The extension never speaks Jupyter itself. `better --lsp-stdio` bridges ark's LSP to stdio for `vscode-languageclient`. The console talks to the extension over a Unix socket of JSON lines (`ide.sock`), and the debugger uses a small in-process DAP bridge to ark's TCP port. There are no native modules.
-- **One LSP client per kernel.** Ark sends live-state updates (console scopes, virtual documents) only to its newest LSP connection. When hosted, the console therefore asks the extension for completions instead of opening its own LSP, so the editor's connection receives everything. This is what makes `ark:` documents openable.
-- **The console owns ark's debugger comm**, because ark runs Step and Continue as console input ("as if typed"). When you click Step, ark sends the console `execute n`; the console wakes from line editing, echoes `Browse[1]> n` and runs it. Run Selection works the same way: the code is echoed one expression per prompt, with your half-typed input preserved.
-- **Run Selection carries a file location** (`positron.code_location`, UTF-8 columns). Ark attaches srcrefs into that file and injects breakpoints, so the debugger shows the real line.
-- **Debug session lifecycle.** VS Code is attached while R is paused or while any R breakpoints exist, which ark needs in order to receive them. Otherwise it is detached, so the debug toolbar only appears when it means something. Detaching is debounced because every step briefly leaves the browser. Ark doesn't replay `stopped` to a client that attaches while R is already paused, so the bridge sends it.
-- **Plots come from ark's own graphics device.** The console opens ark's UI comm, so ark announces each plot as a `positron.plot` comm with a PNG pre-render and serves `render` requests at any size and format. The console relays plot events and render requests over `ide.sock` from its background thread, without disturbing the prompt. The pane tells ark its size (`did_change_plots_render_settings`), so later pre-renders already fit.
-- **Interactive output comes from ark's UI comm.** Ark overrides `print.htmlwidget`, `options(viewer)`, `options(browser)` and `shiny.launch.browser`. It writes widgets to R's tempdir and sends `show_html_file {path, title, destination}`, or sends `show_url {url}` for web apps. The console forwards these over `ide.sock`, also while you're typing. The extension serves each widget's folder from a localhost server under a random token (only registered folders are reachable) and shows it in an iframe. `asExternalUri` keeps this working over remote connections.
-- **Help comes from ark's help comm.** Opening it starts R's help server and ark's help proxy; each request becomes `show_help {url}`. F1 asks ark's LSP for the topic at the cursor (`positron/textDocument/helpTopic`), then asks the help comm to show it (`show_help_topic`). The help page is a cross-origin iframe, so the panel loads it through a small localhost relay. The relay keeps paths unchanged, so R's absolute links work, and appends one script that reports each page's URL and title. That's what makes Back/Forward include links you followed.
-- **Lifecycle.** The extension owns ark. Closing the console only detaches it. `q()` in the console ends the session, and the extension offers *Restart R*. On window close, ark is stopped and its temp dir removed. If ark crashes, its log is kept and its path is written to the *betteR* output channel.
+betteR is built on [ark](https://github.com/posit-dev/ark) by Posit Software, PBC (MIT licence).
