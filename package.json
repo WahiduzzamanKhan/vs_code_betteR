@@ -5,6 +5,10 @@
   "version": "0.1.0",
   "publisher": "better",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/WahiduzzamanKhan/vs_code_betteR.git"
+  },
   "private": true,
   "engines": {
     "vscode": "^1.91.0"
@@ -106,7 +110,7 @@
     "compile": "tsc -p .",
     "watch": "tsc -p . --watch",
     "test": "npm run compile && node ./out/test/runTest.js",
-    "package": "npm run compile && vsce package --allow-missing-repository --skip-license -o better-vscode.vsix"
+    "package": "npm run compile && vsce package -o better-vscode.vsix"
   },
   "dependencies": {
     "vscode-languageclient": "^11.0.0"
