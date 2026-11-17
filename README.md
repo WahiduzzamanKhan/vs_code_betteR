@@ -3,7 +3,7 @@
 Runs **one** ark R session per window and connects every view to it:
 
 ```
-VS Code extension ── spawns ark, owns kernel.json, listens on ide.sock
+VS Code extension ── spawns `better --kernel` (ark built in), owns kernel.json, listens on ide.sock
    ├─ language client ── better --lsp-stdio -f kernel.json ──► ark LSP   (completion, hover, statement ranges, virtual docs)
    ├─ debugger        ── in-process bridge ─────────────────► ark DAP   (port reported by the console)
    ├─ R Plots pane    ── render requests ── ide.sock ── console ──► ark graphics device (positron.plot comms)
@@ -21,7 +21,7 @@ VS Code extension ── spawns ark, owns kernel.json, listens on ide.sock
 
 ## Try it
 
-Prerequisites: the console from the sibling repo [betteR](../betteR) (`../betteR/target/debug/better`, or `better` on `PATH`) and an ark build (`ARK_PATH`, `ark` on `PATH`, or `../betteR_mvp/vendor/ark/target/debug/ark`); rebuild the console after pulling.
+Prerequisites: R, and the `better` binary from the sibling repo [betteR](../betteR) (`better` on `PATH`, or `../betteR/target/debug/better`). `better` includes the R kernel (ark), so nothing else is needed; rebuild it after pulling.
 
 ```sh
 npm install && npm run compile
@@ -51,7 +51,7 @@ Disable **REditorSupport (`reditorsupport.r`)** in windows where you use betteR,
 
 ### Settings
 
-- `betteR.arkPath`: ark binary. If empty: `$ARK_PATH`, then `ark` on `PATH`, then `../betteR_mvp/vendor/ark/target/debug/ark`.
+- `betteR.arkPath`: optional separate ark binary to run R instead of the kernel built into `better`. Leave empty normally.
 - `betteR.consolePath`: better binary. If empty: `better` on `PATH`, then the repo's dev build.
 - `betteR.openConsoleOnStart` (default `true`).
 
