@@ -11,7 +11,7 @@
   },
   "private": true,
   "engines": {
-    "vscode": "^1.91.0"
+    "vscode": "^1.106.0"
   },
   "categories": [
     "Programming Languages"
@@ -55,6 +55,52 @@
       {
         "command": "betteR.restart",
         "title": "Restart R Session",
+        "category": "betteR"
+      },
+      {
+        "command": "betteR.env.refresh",
+        "title": "Refresh R Environment",
+        "category": "betteR",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "betteR.env.clear",
+        "title": "Clear R Environment",
+        "category": "betteR",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "betteR.env.showHidden",
+        "title": "Show Hidden Objects",
+        "category": "betteR",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "betteR.env.hideHidden",
+        "title": "Hide Hidden Objects",
+        "category": "betteR",
+        "icon": "$(eye-closed)"
+      },
+      {
+        "command": "betteR.env.remove",
+        "title": "Remove Object",
+        "category": "betteR",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "betteR.env.print",
+        "title": "Print in Console",
+        "category": "betteR",
+        "icon": "$(play)"
+      },
+      {
+        "command": "betteR.env.str",
+        "title": "Show Structure (str) in Console",
+        "category": "betteR"
+      },
+      {
+        "command": "betteR.env.copy",
+        "title": "Copy",
         "category": "betteR"
       }
     ],
@@ -104,7 +150,124 @@
       {
         "language": "r"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "secondarySidebar": [
+        {
+          "id": "betteR",
+          "title": "R Session",
+          "icon": "$(symbol-variable)"
+        }
+      ]
+    },
+    "views": {
+      "betteR": [
+        {
+          "id": "betteR.environment",
+          "name": "Environment",
+          "icon": "$(symbol-variable)"
+        },
+        {
+          "id": "betteR.searchPath",
+          "name": "Attached",
+          "icon": "$(package)"
+        },
+        {
+          "id": "betteR.namespaces",
+          "name": "Loaded Namespaces",
+          "icon": "$(library)",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "betteR.sessionInfo",
+          "name": "Session",
+          "icon": "$(info)",
+          "visibility": "collapsed"
+        }
+      ]
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "betteR.env.showHidden",
+          "when": "false"
+        },
+        {
+          "command": "betteR.env.hideHidden",
+          "when": "false"
+        },
+        {
+          "command": "betteR.env.remove",
+          "when": "false"
+        },
+        {
+          "command": "betteR.env.print",
+          "when": "false"
+        },
+        {
+          "command": "betteR.env.str",
+          "when": "false"
+        },
+        {
+          "command": "betteR.env.copy",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "betteR.env.showHidden",
+          "when": "view == betteR.environment && !betteR.showHidden",
+          "group": "navigation@1"
+        },
+        {
+          "command": "betteR.env.hideHidden",
+          "when": "view == betteR.environment && betteR.showHidden",
+          "group": "navigation@1"
+        },
+        {
+          "command": "betteR.env.clear",
+          "when": "view == betteR.environment",
+          "group": "navigation@2"
+        },
+        {
+          "command": "betteR.env.refresh",
+          "when": "view =~ /^betteR\\./",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "betteR.env.print",
+          "when": "viewItem == rTopVariable || viewItem == rSearchObject",
+          "group": "inline@1"
+        },
+        {
+          "command": "betteR.env.remove",
+          "when": "viewItem == rTopVariable",
+          "group": "inline@2"
+        },
+        {
+          "command": "betteR.env.print",
+          "when": "viewItem == rTopVariable || viewItem == rSearchObject",
+          "group": "1_run@1"
+        },
+        {
+          "command": "betteR.env.str",
+          "when": "viewItem == rTopVariable || viewItem == rSearchObject",
+          "group": "1_run@2"
+        },
+        {
+          "command": "betteR.env.copy",
+          "when": "viewItem =~ /^r[A-Z]/",
+          "group": "2_copy@1"
+        },
+        {
+          "command": "betteR.env.remove",
+          "when": "viewItem == rTopVariable",
+          "group": "3_remove@1"
+        }
+      ]
+    }
   },
   "scripts": {
     "compile": "tsc -p .",

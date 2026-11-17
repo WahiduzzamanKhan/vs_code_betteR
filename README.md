@@ -15,10 +15,11 @@ It works in standard VS Code and needs nothing installed into your R library: no
 - **Plots without httpgd:** an *R Plots* panel shows every plot sharp at its exact size, re-rendered when you resize the panel. It has history, Save as PNG/SVG, Remove and Clear.
 - **Interactive charts and apps:** plotly, leaflet and other htmlwidgets run live in the plots panel; DT tables, other widgets and Shiny apps run in an *R Viewer* panel.
 - **Help pages:** `?mean`, `help()` and `??search` open in an *R Help* panel with Back/Forward. **F1** on a function in your script shows its help.
+- **Environment explorer:** an *R Session* side bar on the right lists the objects in your session (or in the debug frame while paused), expandable into columns, list elements and slots. It also shows the attached packages, loaded namespaces and session info, all updated after every command.
 
 ## Requirements
 
-- **VS Code 1.91** or newer.
+- **VS Code 1.106** or newer.
 - **R**, installed normally. Tested with R 4.3 and 4.6.
 - **The `better` console**, from [betteR](https://github.com/WahiduzzamanKhan/betteR). It contains the R engine ([ark](https://github.com/posit-dev/ark)) that the extension uses. It must be on your `PATH`, or set in `betteR.consolePath`.
 - **macOS or Linux.** Windows is not supported yet. betteR has been tested on macOS.
@@ -83,6 +84,17 @@ Step with the debug toolbar (**F10** step over, **F11** step into, **F5** contin
 
 Type `?mean`, `help("lm")`, `??regression` or `help(package = "stats")` in the console, or press **F1** on a function name in a script. Help opens in the *R Help* panel; links work, and **◀ ▶** go back and forward.
 
+### Environment explorer
+
+The **R Session** container in the secondary side bar (on the right, next to Chat) has four views. If it's hidden, use *View › Appearance › Secondary Side Bar*.
+
+- **Environment:** the objects in the global environment, with their type and a preview. Expand data frames, lists, environments and S4/R6 objects to see what's inside. While R is paused in the debugger it shows the current frame instead, marked *Debug frame*. Hover an object for its type and size. Title-bar buttons show or hide hidden (`.name`) objects, clear the environment and refresh.
+- **Attached:** the search path (`search()`), with package versions. Expand an entry to list its objects.
+- **Loaded Namespaces:** every loaded namespace and its version; attached ones are marked.
+- **Session:** R version, platform, working directory, memory used by the R process, and counts.
+
+Right-click an object to **Print in Console**, **Show Structure (str)** or **Copy** its name, or to **Remove** it (with confirmation). Print and str run in the console as if typed, so they go into history. Hidden objects are read from the global environment only.
+
 ### Commands
 
 All commands are in the Command Palette under **betteR**:
@@ -96,6 +108,8 @@ All commands are in the Command Palette under **betteR**:
 | Clear All Plots | |
 | Show Viewer | |
 | Restart R Session | |
+| Refresh R Environment | |
+| Clear R Environment | |
 
 ### Settings
 

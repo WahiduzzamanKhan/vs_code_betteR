@@ -1,10 +1,12 @@
 import * as vscode from 'vscode';
 import { ArkDapBridge } from './dap';
+import { EnvironmentExplorer, EnvNode, rExpression } from './environment';
 import { Session } from './session';
 
 /** Returned from `activate`; used by the integration tests. */
 export interface BetteRApi {
     ready(): Promise<Session>;
+    environment: EnvironmentExplorer;
 }
 
 let current: Promise<Session> | undefined;
@@ -15,7 +17,8 @@ export function activate(context: vscode.ExtensionContext): BetteRApi {
     const output = vscode.window.createOutputChannel('betteR', { log: true });
     const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     status.command = 'betteR.openConsole';
-    context.subscriptions.push(output, status);
+    const explorer = new EnvironmentExplorer();
+    context.subscriptions.push(output, status, explorer);
 
     const setStatus = (text: string, tooltip: string) => {
         status.text = text;
@@ -25,6 +28,7 @@ export function activate(context: vscode.ExtensionContext): BetteRApi {
 
     const onUnexpectedExit = (session: Session) => {
         setStatus('$(debug-disconnect) R', 'R session ended');
+        explorer.attach(undefined);
         void vscode.window
             .showWarningMessage('The R session ended.', 'Restart R')
             .then((choice) => choice && vscode.commands.executeCommand('betteR.restart'));
@@ -37,6 +41,8 @@ export function activate(context: vscode.ExtensionContext): BetteRApi {
         starting.then(
             (session) => {
                 active = session;
+                // Before the console opens, so the explorer gets ark's first variable list.
+                explorer.attach(session);
                 setStatus('$(terminal) R', `R session (ark) — ${session.connectionFile}`);
                 if (vscode.workspace.getConfiguration('betteR').get<boolean>('openConsoleOnStart')) {
                     session.openConsole(true);
@@ -84,8 +90,32 @@ export function activate(context: vscode.ExtensionContext): BetteRApi {
             const old = current;
             current = undefined;
             active = undefined;
+            explorer.attach(undefined);
             await (await old?.catch(() => undefined))?.dispose();
             await start();
+        }),
+        vscode.commands.registerCommand('betteR.env.refresh', () => explorer.refresh()),
+        vscode.commands.registerCommand('betteR.env.clear', () => explorer.clear()),
+        vscode.commands.registerCommand('betteR.env.showHidden', () => explorer.setShowHidden(true)),
+        vscode.commands.registerCommand('betteR.env.hideHidden', () => explorer.setShowHidden(false)),
+        vscode.commands.registerCommand('betteR.env.remove', (node: EnvNode) => node && explorer.remove([node])),
+        vscode.commands.registerCommand('betteR.env.print', async (node: EnvNode) => {
+            const expr = node && rExpression(node);
+            if (expr) {
+                (await session()).execute(expr);
+            }
+        }),
+        vscode.commands.registerCommand('betteR.env.str', async (node: EnvNode) => {
+            const expr = node && rExpression(node);
+            if (expr) {
+                (await session()).execute(`str(${expr})`);
+            }
+        }),
+        vscode.commands.registerCommand('betteR.env.copy', async (node: EnvNode) => {
+            const text = node && EnvironmentExplorer.copyText(node);
+            if (text) {
+                await vscode.env.clipboard.writeText(text);
+            }
         }),
         vscode.commands.registerCommand('betteR.runSelection', async () => {
             const editor = vscode.window.activeTextEditor;
@@ -109,7 +139,7 @@ export function activate(context: vscode.ExtensionContext): BetteRApi {
     );
 
     void start();
-    return { ready: () => session() };
+    return { ready: () => session(), environment: explorer };
 }
 
 export async function deactivate(): Promise<void> {

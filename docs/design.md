@@ -13,6 +13,7 @@ VS Code extension ── spawns `better --kernel` (ark built in), owns kernel.js
    ├─ R Plots pane    ── render requests ── ide.sock ── console ──► ark graphics device (positron.plot comms)
    ├─ R Viewer        ── localhost file server ◄── show_html_file / show_url ── console ◄── ark UI comm
    ├─ R Help          ── localhost relay ──► ark help proxy ◄── show_help ── console ◄── ark help comm
+   ├─ R Session views ◄── variables_event / comm_rpc ── ide.sock ── console ──► ark variables + UI comms
    └─ terminal "R"    ── better -f kernel.json --ide-socket ide.sock ──► ark Jupyter (the console; holds ark's debugger comm)
 ```
 
@@ -26,6 +27,7 @@ VS Code extension ── spawns `better --kernel` (ark built in), owns kernel.js
 - **Plots come from ark's own graphics device.** The console opens ark's UI comm, so ark announces each plot as a `positron.plot` comm with a PNG pre-render and serves `render` requests at any size and format. The console relays plot events and render requests over `ide.sock` from its background thread, without disturbing the prompt. The pane tells ark its size (`did_change_plots_render_settings`), so later pre-renders already fit.
 - **Interactive output comes from ark's UI comm.** Ark overrides `print.htmlwidget`, `options(viewer)`, `options(browser)` and `shiny.launch.browser`. It writes widgets to R's tempdir and sends `show_html_file {path, title, destination}`, or sends `show_url {url}` for web apps. The console forwards these over `ide.sock`, also while you're typing. The extension serves each widget's folder from a localhost server under a random token (only registered folders are reachable) and shows it in an iframe. `asExternalUri` keeps this working over remote connections.
 - **Help comes from ark's help comm.** Opening it starts R's help server and ark's help proxy; each request becomes `show_help {url}`. F1 asks ark's LSP for the topic at the cursor (`positron/textDocument/helpTopic`), then asks the help comm to show it (`show_help_topic`). The help page is a cross-origin iframe, so the panel loads it through a small localhost relay. The relay keeps paths unchanged, so R's absolute links work, and appends one script that reports each page's URL and title. That's what makes Back/Forward include links you followed.
+- **The environment explorer uses ark's variables comm and UI comm.** In hosted mode the console opens `positron.variables`. After each execution ark sends a `refresh` (full list) or `update` (diff) for the global env, or for the debug frame while paused, and serves `inspect` (children of a path of access keys), `delete` and `clear`. The console relays these as `variables_event`, and the extension sends `comm_rpc` requests and gets `comm_rpc_reply` back. Ark's list leaves out hidden objects, the search path and loaded namespaces, so those come from silent `evaluate_code` requests on the UI comm: R code runs in the global env with no console echo, and the value returns as JSON. Those requests run after each `prompt_state` (which the console forwards), and only while one of the views is visible. Ark answers comm requests only when R is idle, so a long computation just delays the refresh. Removing an object doesn't make ark send an update, so the extension re-lists afterwards. The views live in a `viewsContainers.secondarySidebar` container, which needs VS Code 1.106.
 - **Lifecycle.** The extension owns ark. Closing the console only detaches it. `q()` in the console ends the session, and the extension offers *Restart R*. On window close, ark is stopped and its temp dir removed. If ark crashes, its log is kept and its path is written to the *betteR* output channel.
 
 ## What the tests cover
@@ -62,4 +64,10 @@ The tests open a copy of `test-fixtures/workspace` in a real VS Code with other 
 3. `browseURL()` on a local app (how Shiny launches) shows the app in *R Viewer* and loads it.
 
 These tests use a hand-built page laid out like an htmlwidget, so no R packages are needed. Real plotly and DT were checked by hand from a throwaway library: plotly arrives with destination `plot` and DT with `viewer`, each as `index.html` plus a `lib/` folder.
+
+**Environment explorer:**
+1. A data frame created in the console appears in *Environment* as a table that expands into its columns, and disappears after `rm()`.
+2. While R is paused at `browser()`, *Environment* shows the frame's local variables; after `Q` it's back to the global env.
+3. *Attached* lists `library()`-attached packages with versions and expands `package:stats` to its objects. *Loaded Namespaces* marks `base` as attached with its version, and *Session* shows the R version.
+4. A hidden `.name` object shows only with *Show Hidden Objects*, expands into its elements, and *Remove* deletes it.
 

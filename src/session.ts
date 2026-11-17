@@ -105,6 +105,14 @@ export class Session implements vscode.Disposable {
         }
     };
     private readonly pendingRenders = new Map<number, { resolve: (img: PlotImage) => void; reject: (e: Error) => void }>();
+    private nextRpcId = 1;
+    private readonly pendingRpcs = new Map<number, { resolve: (result: unknown) => void; reject: (e: Error) => void }>();
+    private readonly variablesEvents = new vscode.EventEmitter<{ method: string; params: unknown }>();
+    /** ark's variables comm: `refresh` (full list) or `update` (diff) after each execution. */
+    readonly onVariablesEvent = this.variablesEvents.event;
+    private readonly promptStates = new vscode.EventEmitter<{ input_prompt: string; continuation_prompt: string }>();
+    /** R returned to a prompt (sent after every execution). */
+    readonly onPromptState = this.promptStates.event;
     private consoleDocVersion = 0;
     private disposed = false;
     private readonly disposables: vscode.Disposable[] = [];
@@ -136,6 +144,8 @@ export class Session implements vscode.Disposable {
             this.plots,
             this.viewer,
             this.help,
+            this.variablesEvents,
+            this.promptStates,
             ide.onMessage((msg) => this.onIdeMessage(msg)),
             vscode.window.onDidCloseTerminal((t) => {
                 if (t === this.terminal) {
@@ -288,6 +298,23 @@ export class Session implements vscode.Disposable {
                 this.pendingHelp.get(msg.id as number)?.(msg.found as boolean);
                 this.pendingHelp.delete(msg.id as number);
                 break;
+            case 'variables_event':
+                this.variablesEvents.fire({ method: msg.method as string, params: msg.params });
+                break;
+            case 'prompt_state':
+                this.promptStates.fire(msg.params as { input_prompt: string; continuation_prompt: string });
+                break;
+            case 'comm_rpc_reply': {
+                const pending = this.pendingRpcs.get(msg.id as number);
+                this.pendingRpcs.delete(msg.id as number);
+                const error = msg.error as { message?: string } | null | undefined;
+                if (error) {
+                    pending?.reject(new Error(error.message ?? 'R request failed'));
+                } else {
+                    pending?.resolve(msg.result);
+                }
+                break;
+            }
             case 'open_with_system':
                 void vscode.env.openExternal(vscode.Uri.file((msg.params as { path: string }).path));
                 break;
@@ -377,6 +404,32 @@ export class Session implements vscode.Disposable {
                 format,
             });
         });
+    }
+
+    /**
+     * A JSON-RPC request on one of ark's comms held by the console: the
+     * variables comm (`list`, `inspect`, `delete`, `clear`) or the UI comm
+     * (`evaluate_code`). Answered once R is idle.
+     */
+    commRpc<T = unknown>(comm: 'variables' | 'ui', method: string, params?: object, timeoutMs = 15_000): Promise<T> {
+        const id = this.nextRpcId++;
+        return new Promise<T>((resolve, reject) => {
+            const timer = setTimeout(() => {
+                this.pendingRpcs.delete(id);
+                reject(new Error(`R did not answer \`${method}\` (busy?)`));
+            }, timeoutMs);
+            this.pendingRpcs.set(id, {
+                resolve: (result) => (clearTimeout(timer), resolve(result as T)),
+                reject: (err) => (clearTimeout(timer), reject(err)),
+            });
+            this.ide.send({ type: 'comm_rpc', id, comm, method, params });
+        });
+    }
+
+    /** Evaluates R code silently in the global env (no console echo) and returns its value as JSON. */
+    async evaluate<T = unknown>(code: string): Promise<T> {
+        const reply = await this.commRpc<{ result: T }>('ui', 'evaluate_code', { code });
+        return reply.result;
     }
 
     /**
