@@ -1,4 +1,4 @@
-# betteR VS Code extension (Phases 2–4)
+# betteR VS Code extension
 
 Runs **one** ark R session per window and connects every view to it:
 
@@ -21,14 +21,14 @@ VS Code extension ── spawns ark, owns kernel.json, listens on ide.sock
 
 ## Try it
 
-Prerequisites are the dev builds from Phases 0 and 1 (`vendor/ark/target/debug/ark` and `console/target/debug/better`; rebuild the console after pulling).
+Prerequisites: the console from the sibling repo [betteR](../betteR) (`../betteR/target/debug/better`, or `better` on `PATH`) and an ark build (`ARK_PATH`, `ark` on `PATH`, or `../betteR_mvp/vendor/ark/target/debug/ark`); rebuild the console after pulling.
 
 ```sh
-cd extension && npm install && npm run compile
+npm install && npm run compile
 code --extensionDevelopmentPath="$PWD" --disable-extension reditorsupport.r /path/to/an/R/project
 ```
 
-You can also open the `extension/` folder in VS Code and press **F5**, which opens the bundled `test-fixtures/workspace` with `analysis.R` and `debug.R`.
+You can also open this folder in VS Code and press **F5**, which opens the bundled `test-fixtures/workspace` with `analysis.R` and `debug.R`.
 
 In the new window, open any `.R` file. The R session starts and an **R** terminal opens with the console.
 
@@ -51,7 +51,7 @@ Disable **REditorSupport (`reditorsupport.r`)** in windows where you use betteR,
 
 ### Settings
 
-- `betteR.arkPath`: ark binary. If empty: `$ARK_PATH`, then `ark` on `PATH`, then the repo's dev build.
+- `betteR.arkPath`: ark binary. If empty: `$ARK_PATH`, then `ark` on `PATH`, then `../betteR_mvp/vendor/ark/target/debug/ark`.
 - `betteR.consolePath`: better binary. If empty: `better` on `PATH`, then the repo's dev build.
 - `betteR.openConsoleOnStart` (default `true`).
 
