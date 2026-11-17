@@ -28,7 +28,8 @@ async function main(): Promise<void> {
     const orphans = cp
         .execFileSync('ps', ['-ax', '-o', 'pid=,command='], { encoding: 'utf8' })
         .split('\n')
-        .filter((line) => /\/ark --connection_file \S*better-vscode-/.test(line));
+        // `<pid> <executable> <args>`: match the executable itself, not any command mentioning it.
+        .filter((line) => /^\s*\d+\s+\S*\/(ark|better --kernel) --connection_file \S*better-vscode-/.test(line));
     if (orphans.length) {
         throw new Error(`ark still running after VS Code exited:\n${orphans.join('\n')}`);
     }
