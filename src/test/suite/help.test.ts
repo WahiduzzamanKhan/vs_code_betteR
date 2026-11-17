@@ -37,6 +37,19 @@ suite('betteR help: R documentation in an R Help panel', () => {
         await waitFor('page to load in the panel', () => session.help.title, (t) => /Arithmetic Mean/.test(t));
     });
 
+    test('help pages follow the VS Code theme', async () => {
+        const theme = await waitFor('panel to report the theme', () => session.help.theme, (t) => !!t);
+        const background = theme!.vars['--vscode-editor-background'];
+        assert.ok(background, 'theme has an editor background');
+
+        // Pages arrive already themed (no white flash), with the theme's own values.
+        const html = await (await fetch(session.help.current!)).text();
+        const head = html.slice(0, html.search(/R\.css/));
+        assert.match(head, /html\.betteR-themed body/, 'theme styles come before R.css');
+        assert.ok(head.includes(`--vscode-editor-background: ${background};`), 'theme colors are inlined');
+        assert.match(head, /classList\.add\("betteR-themed"\)/);
+    });
+
     test('Back and Forward move through help history', async () => {
         session.execute('help("lm")');
         await waitFor('lm page', () => session.help.title, (t) => /Fitting Linear Models/.test(t));

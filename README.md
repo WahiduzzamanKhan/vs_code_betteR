@@ -82,7 +82,7 @@ Step with the debug toolbar (**F10** step over, **F11** step into, **F5** contin
 
 ### Help
 
-Type `?mean`, `help("lm")`, `??regression` or `help(package = "stats")` in the console, or press **F1** on a function name in a script. Help opens in the *R Help* panel; links work, and **◀ ▶** go back and forward.
+Type `?mean`, `help("lm")`, `??regression` or `help(package = "stats")` in the console, or press **F1** on a function name in a script. Help opens in the *R Help* panel, in your VS Code theme's colors and fonts; links work, and **◀ ▶** go back and forward.
 
 ### Environment explorer
 

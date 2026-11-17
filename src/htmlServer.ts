@@ -108,11 +108,21 @@ export function iframeCsp(nonce: string): string {
 const NAV_SCRIPT =
     '<script>parent.postMessage({ type: "betteR-nav", url: location.href, title: document.title }, "*");</script>';
 
+/** Inserts `extra` at the start of the page's `<head>` (or of the page, if it has none). */
+function injectHead(html: string, extra: string): string {
+    if (!extra) {
+        return html;
+    }
+    const head = /<head[^>]*>/i.exec(html);
+    return head ? html.slice(0, head.index + head[0].length) + extra + html.slice(head.index + head[0].length) : extra + html;
+}
+
 /**
  * A localhost relay in front of another local server (ark's help proxy). It
  * keeps paths unchanged, so absolute links like `/doc/html/R.css` still work,
  * and adds one script to HTML pages that reports navigations to the panel:
  * the page is a cross-origin iframe, so the panel can't observe them itself.
+ * `head` supplies extra markup (e.g. theme styles) for the top of each page.
  */
 export class NavProxy implements vscode.Disposable {
     private constructor(
@@ -121,7 +131,7 @@ export class NavProxy implements vscode.Disposable {
         readonly port: number,
     ) {}
 
-    static start(target: string): Promise<NavProxy> {
+    static start(target: string, head: () => string = () => ''): Promise<NavProxy> {
         const origin = new URL(target);
         return new Promise((resolve, reject) => {
             const server = http.createServer((req, res) => {
@@ -141,7 +151,7 @@ export class NavProxy implements vscode.Disposable {
                             delete headers['content-length'];
                             delete headers['content-encoding'];
                             res.writeHead(up.statusCode ?? 200, headers);
-                            res.end(Buffer.concat(chunks).toString('utf8') + NAV_SCRIPT);
+                            res.end(injectHead(Buffer.concat(chunks).toString('utf8'), head()) + NAV_SCRIPT);
                         });
                     },
                 );
