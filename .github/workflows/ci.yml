@@ -35,6 +35,12 @@ jobs:
           r-version: release
           use-public-rspm: true
 
+      # CRAN's macOS R links its Cairo devices (svg(), used for plot export)
+      # against XQuartz.
+      - name: Install XQuartz
+        if: runner.os == 'macOS'
+        run: brew install --cask xquartz
+
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
