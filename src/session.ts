@@ -128,7 +128,6 @@ export class Session implements vscode.Disposable {
         readonly cwd: string | undefined,
         readonly client: LanguageClient,
         readonly ide: IdeChannel,
-        private readonly ideSocket: string,
         readonly htmlServer: HtmlServer,
         private readonly output: vscode.LogOutputChannel,
     ) {
@@ -202,7 +201,6 @@ export class Session implements vscode.Disposable {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'better-vscode-'));
         const connectionFile = path.join(dir, 'kernel.json');
         const logFile = path.join(dir, 'ark.log');
-        const ideSocket = path.join(dir, 'ide.sock');
         const info = {
             shell_port: await freePort(),
             iopub_port: await freePort(),
@@ -217,7 +215,7 @@ export class Session implements vscode.Disposable {
         };
         // The connection file holds the HMAC key: owner-only.
         fs.writeFileSync(connectionFile, JSON.stringify(info, null, 2), { mode: 0o600 });
-        const ide = await IdeChannel.listen(ideSocket);
+        const ide = await IdeChannel.listen();
         const htmlServer = await HtmlServer.start();
 
         const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -247,7 +245,7 @@ export class Session implements vscode.Disposable {
             },
         };
         const client = new LanguageClient('betteR', 'betteR (ark)', serverOptions, clientOptions);
-        const session = new Session(kernel, connectionFile, logFile, dir, consolePath, cwd, client, ide, ideSocket, htmlServer, output);
+        const session = new Session(kernel, connectionFile, logFile, dir, consolePath, cwd, client, ide, htmlServer, output);
 
         kernel.on('exit', (code, signal) => {
             output.appendLine(`ark exited (code ${code}, signal ${signal})`);
@@ -574,7 +572,9 @@ export class Session implements vscode.Disposable {
             this.terminal = vscode.window.createTerminal({
                 name: CONSOLE_NAME,
                 shellPath: this.consolePath,
-                shellArgs: ['--connection-file', this.connectionFile, '--ide-socket', this.ideSocket],
+                shellArgs: ['--connection-file', this.connectionFile, '--ide', String(this.ide.port)],
+                // In the environment, not argv: other users can see process arguments.
+                env: { BETTER_IDE_TOKEN: this.ide.token },
                 cwd: this.cwd,
                 iconPath: new vscode.ThemeIcon('terminal'),
             });

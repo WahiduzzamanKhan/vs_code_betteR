@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import * as cp from 'child_process';
 import * as fs from 'fs';
+import * as net from 'net';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import type { BetteRApi } from '../../extension';
@@ -147,6 +148,34 @@ suite('betteR: one live R session shared by console and editor', () => {
             assert.match(reply.item.documentation?.value ?? '', /Arithmetic Mean/);
         } finally {
             session.ide.send = send;
+        }
+    });
+
+    test('the console channel closes connections without the right token', async () => {
+        // Resolves with whatever the server sent before closing the connection.
+        const attempt = (data: string) =>
+            new Promise<string>((resolve, reject) => {
+                const socket = net.connect(session.ide.port, '127.0.0.1');
+                let received = '';
+                socket.setEncoding('utf8');
+                socket.on('data', (chunk: string) => (received += chunk));
+                socket.on('connect', () => socket.write(data));
+                socket.on('close', () => resolve(received));
+                socket.on('error', () => undefined);
+                setTimeout(() => {
+                    socket.destroy();
+                    reject(new Error(`connection sending ${JSON.stringify(data.slice(0, 60))} was not closed`));
+                }, 5_000);
+            });
+        const wrong = session.ide.token.replace(/^./, (c) => (c === '0' ? '1' : '0'));
+        for (const data of [
+            JSON.stringify({ type: 'hello', token: wrong }) + '\n',
+            JSON.stringify({ type: 'hello', token: session.ide.token.slice(0, 8) }) + '\n',
+            JSON.stringify({ type: 'execute', code: 'cat(1)' }) + '\n',
+            'garbage\n',
+            'x'.repeat(10_000),
+        ]) {
+            assert.strictEqual(await attempt(data), '', 'nothing is sent before a valid hello');
         }
     });
 
