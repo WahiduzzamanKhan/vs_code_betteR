@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      # Side by side, as in development: the extension falls back to
+      # ../betteR/target/debug/better.
+      - uses: actions/checkout@v4
+        with:
+          path: vs_code_betteR
+
+      - uses: actions/checkout@v4
+        with:
+          repository: WahiduzzamanKhan/betteR
+          path: betteR
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          use-public-rspm: true
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: betteR
+
+      - name: Build better
+        working-directory: betteR
+        run: cargo build --locked
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: vs_code_betteR/package-lock.json
+
+      - name: Install dependencies
+        working-directory: vs_code_betteR
+        run: npm ci
+
+      - name: Use the fresh better build in the test VS Code
+        working-directory: vs_code_betteR
+        run: |
+          mkdir -p .vscode-test/user-data/User
+          echo "{ \"betteR.consolePath\": \"$GITHUB_WORKSPACE/betteR/target/debug/better\" }" > .vscode-test/user-data/User/settings.json
+
+      - name: Integration tests
+        working-directory: vs_code_betteR
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a npm test
+          else
+            npm test
+          fi
+
+      - name: Kernel logs
+        if: failure()
+        run: |
+          for f in "${TMPDIR:-/tmp}"/better-vscode-*/ark.log; do
+            [ -f "$f" ] && { echo "::group::$f"; cat "$f"; echo "::endgroup::"; }
+          done
+          true
