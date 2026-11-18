@@ -100,6 +100,56 @@ suite('betteR: one live R session shared by console and editor', () => {
         assert.match(text, /Arithmetic Mean/);
     });
 
+    test('the console gets signature help from the editor language client', async () => {
+        // What the console sends while the cursor is inside `mean(1:10, )`.
+        const replies: { id: number; help: { signatures: { label: string }[]; activeParameter?: number } }[] = [];
+        const send = session.ide.send.bind(session.ide);
+        session.ide.send = (msg) => {
+            if (msg.type === 'signature_reply') {
+                replies.push(msg as never);
+            }
+            send(msg);
+        };
+        try {
+            (session as unknown as { onIdeMessage(msg: object): void }).onIdeMessage({
+                type: 'signature',
+                id: 4242,
+                text: 'mean(1:10, )',
+                offset: 11,
+            });
+            const [reply] = await waitFor('signature reply', async () => replies, (r) => r.length > 0, 15_000);
+            assert.strictEqual(reply.id, 4242);
+            assert.match(reply.help.signatures[0].label, /^mean\(x, \.\.\.\)/);
+            assert.strictEqual(reply.help.activeParameter, 1);
+        } finally {
+            session.ide.send = send;
+        }
+    });
+
+    test('the console gets help for a completion from the editor language client', async () => {
+        const replies: { id: number; item: { documentation?: { value?: string } } }[] = [];
+        const send = session.ide.send.bind(session.ide);
+        session.ide.send = (msg) => {
+            if (msg.type === 'resolve_reply') {
+                replies.push(msg as never);
+            }
+            send(msg);
+        };
+        try {
+            // The completion item ark gives for `mean`, as the console sends it back.
+            (session as unknown as { onIdeMessage(msg: object): void }).onIdeMessage({
+                type: 'resolve',
+                id: 4343,
+                item: { label: 'mean', kind: 3, data: { Function: { name: 'mean', package: 'base' } } },
+            });
+            const [reply] = await waitFor('resolve reply', async () => replies, (r) => r.length > 0, 15_000);
+            assert.strictEqual(reply.id, 4343);
+            assert.match(reply.item.documentation?.value ?? '', /Arithmetic Mean/);
+        } finally {
+            session.ide.send = send;
+        }
+    });
+
     test('Run Selection sends editor code to the console session', async () => {
         const editor = await vscode.window.showTextDocument(doc);
         editor.selection = new vscode.Selection(1, 0, 1, 0);

@@ -41,7 +41,9 @@ The tests open a copy of `test-fixtures/workspace` in a real VS Code with other 
 2. `y <- mtcars` typed into the console makes `y$` complete `mpg, cyl, hp, carb` in the editor.
 3. Hover on `mean` shows the R help page.
 4. *Run Selection* runs code in the console that creates a name only the live session can know, and the editor then completes it.
-5. The installed R package set and all project files, including `renv.lock`, are unchanged.
+5. The console's signature help request (`signature`) is answered through the editor's language client: `mean(1:10, )` gives `mean(x, ...)` with the second parameter active.
+6. The console's request for a completion's help (`resolve`) is answered the same way: `mean` comes back with its help page.
+7. The installed R package set and all project files, including `renv.lock`, are unchanged.
 
 **Debugger (Phase 3):**
 1. Cmd+Enter on line 1 of `add_one` runs the whole function. Calling it stops VS Code at `browser()` on `debug.R:3`, the real file and not a copy. VS Code focuses that frame, the variables pane shows `x = 1, y = 2`, Step Over moves to line 4, and Continue finishes with the right result (`4`).

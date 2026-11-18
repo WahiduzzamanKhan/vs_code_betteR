@@ -279,6 +279,12 @@ export class Session implements vscode.Disposable {
             case 'complete':
                 void this.completeForConsole(msg.id as number, msg.text as string, msg.offset as number);
                 break;
+            case 'signature':
+                void this.signatureForConsole(msg.id as number, msg.text as string, msg.offset as number);
+                break;
+            case 'resolve':
+                void this.resolveForConsole(msg.id as number, msg.item);
+                break;
             case 'plot_open':
                 this.plots.onOpen(msg.comm_id as string, msg.pre_render as PlotImage | undefined);
                 break;
@@ -507,33 +513,59 @@ export class Session implements vscode.Disposable {
         const fallback = setTimeout(done, 500);
     }
 
-    /** Console completion runs through this (the kernel's only) LSP client. */
+    /**
+     * Console completion and signature help run through this (the kernel's
+     * only) LSP client, against a document mirroring the console's input.
+     * Returns the LSP position of byte `offset` in `text`.
+     */
+    private async syncConsoleDoc(text: string, offset: number): Promise<{ line: number; character: number }> {
+        this.consoleDocVersion += 1;
+        if (this.consoleDocVersion === 1) {
+            await this.client.sendNotification('textDocument/didOpen', {
+                textDocument: { uri: CONSOLE_DOC_URI, languageId: 'r', version: 1, text },
+            });
+        } else {
+            await this.client.sendNotification('textDocument/didChange', {
+                textDocument: { uri: CONSOLE_DOC_URI, version: this.consoleDocVersion },
+                contentChanges: [{ text }],
+            });
+        }
+        const before = Buffer.from(text, 'utf8').subarray(0, offset).toString('utf8');
+        return { line: before.split('\n').length - 1, character: before.length - (before.lastIndexOf('\n') + 1) };
+    }
+
     private async completeForConsole(id: number, text: string, offset: number): Promise<void> {
         let items: unknown = [];
         try {
-            this.consoleDocVersion += 1;
-            if (this.consoleDocVersion === 1) {
-                await this.client.sendNotification('textDocument/didOpen', {
-                    textDocument: { uri: CONSOLE_DOC_URI, languageId: 'r', version: 1, text },
-                });
-            } else {
-                await this.client.sendNotification('textDocument/didChange', {
-                    textDocument: { uri: CONSOLE_DOC_URI, version: this.consoleDocVersion },
-                    contentChanges: [{ text }],
-                });
-            }
-            const before = Buffer.from(text, 'utf8').subarray(0, offset).toString('utf8');
-            const line = before.split('\n').length - 1;
-            const character = before.length - (before.lastIndexOf('\n') + 1);
-            items =
-                (await this.client.sendRequest('textDocument/completion', {
-                    textDocument: { uri: CONSOLE_DOC_URI },
-                    position: { line, character },
-                })) ?? [];
+            const position = await this.syncConsoleDoc(text, offset);
+            items = (await this.client.sendRequest('textDocument/completion', { textDocument: { uri: CONSOLE_DOC_URI }, position })) ?? [];
         } catch (err) {
             this.output.appendLine(`Console completion failed: ${err}`);
         }
         this.ide.send({ type: 'complete_reply', id, items });
+    }
+
+    /** Help for the completion the console has selected (`completionItem/resolve`), shown beside its menu. */
+    private async resolveForConsole(id: number, item: unknown): Promise<void> {
+        let resolved = item;
+        try {
+            resolved = (await this.client.sendRequest('completionItem/resolve', item)) ?? item;
+        } catch (err) {
+            this.output.appendLine(`Console completion help failed: ${err}`);
+        }
+        this.ide.send({ type: 'resolve_reply', id, item: resolved });
+    }
+
+    /** The signature of the call around the console's cursor, shown under its input. */
+    private async signatureForConsole(id: number, text: string, offset: number): Promise<void> {
+        let help: unknown = null;
+        try {
+            const position = await this.syncConsoleDoc(text, offset);
+            help = (await this.client.sendRequest('textDocument/signatureHelp', { textDocument: { uri: CONSOLE_DOC_URI }, position })) ?? null;
+        } catch (err) {
+            this.output.appendLine(`Console signature help failed: ${err}`);
+        }
+        this.ide.send({ type: 'signature_reply', id, help });
     }
 
     /** Shows the console terminal, creating it (attached to this session) if needed. */
