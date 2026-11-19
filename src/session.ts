@@ -6,6 +6,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { LanguageClient, LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node';
+import { executableName, existingFile, findOnPath } from './binary';
 import { IdeChannel, IdeMessage } from './ide';
 import { DataExplorers } from './dataExplorer';
 import { HelpPanel } from './help';
@@ -27,29 +28,20 @@ function freePort(): Promise<number> {
     });
 }
 
-function onPath(name: string): string | undefined {
-    for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
-        const candidate = path.join(dir, name);
-        if (dir && fs.existsSync(candidate)) {
-            return candidate;
-        }
-    }
-    return undefined;
-}
-
 /** Setting, then env var, then PATH, then a development build in a sibling checkout. */
 function resolveBinary(setting: string, envVar: string | undefined, name: string, devPath: string): string {
     const configured = vscode.workspace.getConfiguration('betteR').get<string>(setting);
     const candidates = [configured, envVar ? process.env[envVar] : undefined];
     for (const c of candidates) {
         if (c) {
-            if (!fs.existsSync(c)) {
+            const file = existingFile(c);
+            if (!file) {
                 throw new Error(`${name} not found at ${c}`);
             }
-            return c;
+            return file;
         }
     }
-    const found = onPath(name) ?? (fs.existsSync(devPath) ? devPath : undefined);
+    const found = findOnPath(name) ?? existingFile(devPath);
     if (!found) {
         throw new Error(`Could not find \`${name}\`. Set betteR.${setting}.`);
     }
@@ -189,7 +181,7 @@ export class Session implements vscode.Disposable {
             'consolePath',
             undefined,
             'better',
-            path.join(path.resolve(context.extensionPath, '..'), 'betteR/target/debug/better'),
+            path.join(path.resolve(context.extensionPath, '..'), 'betteR', 'target', 'debug', executableName('better')),
         );
         // Optional: a separate ark build instead of the built-in kernel.
         const arkOverride = vscode.workspace.getConfiguration('betteR').get<string>('arkPath');

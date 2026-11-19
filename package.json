@@ -134,7 +134,7 @@
         "betteR.consolePath": {
           "type": "string",
           "default": "",
-          "description": "Path to the better binary (console and built-in R kernel). Empty: `better` on PATH, then ../betteR/target/debug/better."
+          "description": "Path to the better binary (console and built-in R kernel); `better.exe` on Windows. Empty: `better` (`better.exe` on Windows) on PATH, then ../betteR/target/debug/better."
         },
         "betteR.openConsoleOnStart": {
           "type": "boolean",
