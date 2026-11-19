@@ -8,6 +8,12 @@ import type { Session } from '../../session';
 
 const workspace = () => vscode.workspace.workspaceFolders![0].uri.fsPath;
 
+/**
+ * A debugger path in VS Code's own form, to compare with `uri.fsPath`: on
+ * Windows that lowercases the drive letter and uses `\\`, whatever ark sends.
+ */
+const fsPath = (p: string | undefined) => (p ? vscode.Uri.file(p).fsPath : p);
+
 async function waitFor<T>(what: string, probe: () => T | Promise<T>, ok: (v: T) => boolean, ms = 60_000): Promise<T> {
     const deadline = Date.now() + ms;
     let last: T | undefined;
@@ -92,7 +98,7 @@ suite('betteR debugger: browser() and breakpoints in VS Code', () => {
         session.execute('res_add_one <- add_one(1)');
         const debug = await waitFor('debug session', () => arkSession(), (s) => s !== undefined);
         const frame = await waitFor('stop at browser()', () => topFrame(debug!), (f) => f?.line === 3);
-        assert.strictEqual(frame!.source?.path, doc.uri.fsPath, 'frame points at the real file, not a copy');
+        assert.strictEqual(fsPath(frame!.source?.path), doc.uri.fsPath, 'frame points at the real file, not a copy');
 
         // VS Code itself is stopped (so it highlights the line), not just the adapter.
         await waitFor('VS Code focused stack frame', () => vscode.debug.activeStackItem, (i) => i instanceof vscode.DebugStackFrame);
@@ -122,7 +128,7 @@ suite('betteR debugger: browser() and breakpoints in VS Code', () => {
         session.execute('res_times <- times_two(5)');
 
         const frame = await waitFor('stop at breakpoint', () => topFrame(debug!), (f) => f?.line === 8);
-        assert.strictEqual(frame!.source?.path, doc.uri.fsPath);
+        assert.strictEqual(fsPath(frame!.source?.path), doc.uri.fsPath);
         assert.strictEqual((await locals(debug!, frame!.id)).v, '5');
 
         await vscode.commands.executeCommand('workbench.action.debug.continue');

@@ -94,3 +94,5 @@ These tests use a hand-built page laid out like an htmlwidget, so no R packages 
 **Shutting R down** (runs last, since it restarts R):
 1. *Restart R* lets R quit cleanly: a `.Last` defined in the session runs and R's `tempdir()` is removed, and the new session evaluates code.
 2. Windows process memory is parsed from `tasklist` output in English, German and French number formats; "no tasks" gives none.
+
+**After VS Code exits** (`runTest.ts`, on every OS): no betteR kernel started during the run is still running (kernels of other betteR windows, listed before the run, are ignored), and no new `Rtmp*` directory is left in the temp directory, which would mean an R was killed rather than shut down. Processes are listed with `ps`, or on Windows with `Get-CimInstance Win32_Process`.

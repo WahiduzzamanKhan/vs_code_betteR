@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       # Side by side, as in development: the extension falls back to
       # ../betteR/target/debug/better.
@@ -61,14 +61,22 @@ jobs:
         working-directory: vs_code_betteR
         run: npm ci
 
+      # Written by Node, so the Windows path (D:\a\...) is escaped properly in the JSON.
       - name: Use the fresh better build in the test VS Code
         working-directory: vs_code_betteR
+        shell: bash
         run: |
           mkdir -p .vscode-test/user-data/User
-          echo "{ \"betteR.consolePath\": \"$GITHUB_WORKSPACE/betteR/target/debug/better\" }" > .vscode-test/user-data/User/settings.json
+          node -e '
+            const path = require("path");
+            const exe = process.platform === "win32" ? "better.exe" : "better";
+            const better = path.join(process.env.GITHUB_WORKSPACE, "betteR", "target", "debug", exe);
+            require("fs").writeFileSync(".vscode-test/user-data/User/settings.json", JSON.stringify({ "betteR.consolePath": better }));'
+          cat .vscode-test/user-data/User/settings.json
 
       - name: Integration tests
         working-directory: vs_code_betteR
+        shell: bash
         run: |
           if [ "$RUNNER_OS" = Linux ]; then
             xvfb-run -a npm test
@@ -77,9 +85,18 @@ jobs:
           fi
 
       - name: Kernel logs
-        if: failure()
+        if: failure() && runner.os != 'Windows'
         run: |
           for f in "${TMPDIR:-/tmp}"/better-vscode-*/ark.log; do
             [ -f "$f" ] && { echo "::group::$f"; cat "$f"; echo "::endgroup::"; }
           done
           true
+
+      - name: Kernel logs (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-ChildItem $env:TEMP -Directory -Filter 'better-vscode-*' -ErrorAction SilentlyContinue |
+            ForEach-Object { Join-Path $_.FullName 'ark.log' } |
+            Where-Object { Test-Path $_ } |
+            ForEach-Object { "::group::$_"; Get-Content $_; "::endgroup::" }
