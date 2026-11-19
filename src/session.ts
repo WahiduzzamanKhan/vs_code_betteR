@@ -627,6 +627,27 @@ export class Session implements vscode.Disposable {
         });
     }
 
+    /**
+     * Asks ark to end the session (`better --shutdown`, a Jupyter
+     * `shutdown_request`), so R quits as it would at `q()`: it runs `.Last`
+     * and finalizers and removes its temp directory. Killing the process skips
+     * all that, and on Windows `kill()` always kills, whatever the signal; on
+     * macOS, R ignored SIGTERM altogether. Not awaited: `dispose` waits for the
+     * kernel's exit instead, and kills it if it doesn't come.
+     */
+    private requestShutdown(): void {
+        try {
+            const helper = cp.spawn(this.consolePath, ['--shutdown', '--connection-file', this.connectionFile], {
+                stdio: 'ignore',
+                windowsHide: true,
+            });
+            helper.on('error', (err) => this.output.appendLine(`Shutdown request failed: ${err.message}`));
+            helper.unref();
+        } catch (err) {
+            this.output.appendLine(`Shutdown request failed: ${(err as Error).message}`);
+        }
+    }
+
     async dispose(): Promise<void> {
         if (this.disposed) {
             return;
@@ -638,7 +659,7 @@ export class Session implements vscode.Disposable {
         const crashed = !this.isRunning;
         const exited = crashed ? Promise.resolve() : new Promise((resolve) => this.kernel.once('exit', resolve));
         if (!crashed) {
-            this.kernel.kill('SIGTERM');
+            this.requestShutdown();
         }
         if (this.debugSession) {
             void vscode.debug.stopDebugging(this.debugSession);
@@ -652,6 +673,7 @@ export class Session implements vscode.Disposable {
         }
         await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 3000))]);
         if (this.isRunning) {
+            this.output.appendLine('R did not shut down in time; killing it.');
             this.kernel.kill('SIGKILL');
         }
         process.off('exit', this.killOnHostExit);

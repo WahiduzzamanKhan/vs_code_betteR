@@ -129,14 +129,34 @@ function formatBytes(n: number): string {
     return `${v.toFixed(v < 10 ? 1 : 0)} ${units[i]}`;
 }
 
-/** Resident memory of a process, from `ps` (macOS and Linux). */
+/**
+ * Memory of a process in bytes: resident set size from `ps` on macOS and
+ * Linux, working set from `tasklist` on Windows. Undefined if unknown.
+ */
 function processMemory(pid: number): Promise<number | undefined> {
+    const [command, args, parse] =
+        process.platform === 'win32'
+            ? ['tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], parseTasklistMemory]
+            : ['ps', ['-o', 'rss=', '-p', String(pid)], (out: string) => Number(out.trim()) || undefined];
     return new Promise((resolve) =>
-        cp.execFile('ps', ['-o', 'rss=', '-p', String(pid)], (err, out) => {
-            const kb = Number(out.trim());
-            resolve(err || !kb ? undefined : kb * 1024);
+        cp.execFile(command, args, { windowsHide: true }, (err, out) => {
+            const kb = err ? undefined : parse(out);
+            resolve(kb === undefined ? undefined : kb * 1024);
         }),
     );
+}
+
+/**
+ * The "Mem Usage" column (KB) of `tasklist /FO CSV /NH` output, e.g.
+ * `"better.exe","1234","Console","1","123,456 K"`. Its thousands separator
+ * and unit depend on the locale (`123.456 K`, `123 456 Ko`), so only digits
+ * count. When no process matches, tasklist prints an `INFO:` line instead.
+ */
+export function parseTasklistMemory(out: string): number | undefined {
+    const line = out.split(/\r?\n/).find((l) => l.startsWith('"'));
+    const columns = line?.slice(1, -1).split('","');
+    const kb = columns && columns.length >= 5 ? Number(columns[columns.length - 1].replace(/\D/g, '')) : NaN;
+    return kb > 0 ? kb : undefined;
 }
 
 class Provider implements vscode.TreeDataProvider<EnvNode> {
