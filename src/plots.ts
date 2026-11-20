@@ -148,6 +148,13 @@ export class PlotsPanel implements vscode.Disposable {
         );
         this.panel.webview.html = this.html();
         this.panel.webview.onDidReceiveMessage((msg) => this.onMessage(msg));
+        // A hidden pane may have changed size; ask it, since its own resize
+        // reports can be held up while the window is in the background.
+        this.panel.onDidChangeViewState(({ webviewPanel }) => {
+            if (webviewPanel.visible) {
+                void webviewPanel.webview.postMessage({ type: 'measure' });
+            }
+        });
         this.panel.onDidDispose(() => {
             this.panel = undefined;
             this.viewport = undefined;
@@ -278,14 +285,24 @@ export class PlotsPanel implements vscode.Disposable {
   for (const id of ['prev', 'next', 'save', 'remove', 'clear']) {
     document.getElementById(id).onclick = () => vscode.postMessage({ type: id });
   }
+  // Reports the pane's size when it changes. Also run on every message from
+  // the extension: in a background window, timers and resize observers are
+  // throttled almost to a stop, so they alone can report it a minute late.
+  let reported = '';
+  function report() {
+    const width = view.clientWidth, height = view.clientHeight, ratio = window.devicePixelRatio || 1;
+    const key = width + 'x' + height + '@' + ratio;
+    if (width <= 10 || height <= 10 || key === reported) return;
+    reported = key;
+    vscode.postMessage({ type: 'resize', width, height, ratio });
+  }
   let timer;
   new ResizeObserver(() => {
     clearTimeout(timer);
-    timer = setTimeout(() => vscode.postMessage({
-      type: 'resize', width: view.clientWidth, height: view.clientHeight, ratio: window.devicePixelRatio || 1,
-    }), 150);
+    timer = setTimeout(report, 150);
   }).observe(view);
   window.addEventListener('message', ({ data }) => {
+    report();
     if (data.type !== 'plot') return;
     document.getElementById('count').textContent = data.count ? (data.index + 1) + ' / ' + data.count : '0 / 0';
     document.getElementById('prev').disabled = data.index <= 0;
@@ -303,6 +320,7 @@ export class PlotsPanel implements vscode.Disposable {
     if (!data.html) frame.removeAttribute('src');
   });
   vscode.postMessage({ type: 'ready' });
+  report();
 </script>
 </body></html>`;
     }
