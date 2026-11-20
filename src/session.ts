@@ -71,6 +71,42 @@ function hasRBreakpoints(): boolean {
 }
 
 /**
+ * R code that opens and closes the SVG device ark renders with (svglite if ark
+ * uses it, else `grDevices::svg()`) and returns "" if it works, or why not.
+ *
+ * Without Cairo (CRAN's macOS R without XQuartz) `svg()` only warns and opens
+ * no device. ark doesn't check for that: it replays the plot onto its own
+ * device and closes it, which breaks later plots. So SVG renders are checked
+ * first. Writes only a temp file.
+ */
+const SVG_DEVICE_PROBE = `local({
+    open_svg <- tryCatch(
+        get("device_svg", envir = environment(get(".ps.graphics.render_plot_from_recording")), inherits = FALSE),
+        error = function(e) function(filename, width, height) grDevices::svg(filename, width, height)
+    )
+    old <- grDevices::dev.cur()
+    file <- tempfile(fileext = ".svg")
+    on.exit(unlink(file))
+    problem <- ""
+    withCallingHandlers(
+        tryCatch(open_svg(file, 1, 1), error = function(e) problem <<- conditionMessage(e)),
+        warning = function(w) {
+            problem <<- conditionMessage(w)
+            invokeRestart("muffleWarning")
+        }
+    )
+    if (grDevices::dev.cur() == old) {
+        if (nzchar(problem)) problem else "the SVG device did not open"
+    } else {
+        utils::capture.output({
+            grDevices::dev.off()
+            if (old > 1) grDevices::dev.set(old)
+        })
+        ""
+    }
+})`;
+
+/**
  * One ark kernel shared by every view: the extension owns the process and its
  * connection file; the editor's language client and the terminal console both
  * attach to it. The console holds ark's debugger comm and reports to us over
@@ -394,12 +430,23 @@ export class Session implements vscode.Disposable {
     }
 
     /** Asks ark (via the console) to render a plot at a given size and format. */
-    renderPlot(
+    async renderPlot(
         commId: string,
         size: { width: number; height: number },
         pixelRatio: number,
         format: 'png' | 'svg',
     ): Promise<PlotImage> {
+        if (format === 'svg') {
+            const problem = await this.evaluate<string>(SVG_DEVICE_PROBE);
+            if (problem) {
+                throw new Error(
+                    process.platform === 'darwin'
+                        ? `SVG export needs XQuartz on macOS: R's svg() device can't start without it (${problem}). ` +
+                              'Save as PNG instead, or install XQuartz from https://www.xquartz.org and restart R.'
+                        : `R can't make SVG files here (${problem}). Save as PNG instead.`,
+                );
+            }
+        }
         const id = this.nextRenderId++;
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => {

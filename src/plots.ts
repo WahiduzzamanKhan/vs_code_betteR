@@ -245,8 +245,12 @@ export class PlotsPanel implements vscode.Disposable {
         }
         const format = target.fsPath.toLowerCase().endsWith('.svg') ? 'svg' : 'png';
         const size = this.viewport ?? { width: 800, height: 600, ratio: 1 };
-        const image = await this.host.renderPlot(entry.commId, size, format === 'png' ? 2 : 1, format);
-        fs.writeFileSync(target.fsPath, Buffer.from(image.data, 'base64'));
+        try {
+            const image = await this.host.renderPlot(entry.commId, size, format === 'png' ? 2 : 1, format);
+            fs.writeFileSync(target.fsPath, Buffer.from(image.data, 'base64'));
+        } catch (err) {
+            void vscode.window.showErrorMessage(`Couldn't save the plot: ${err instanceof Error ? err.message : String(err)}`);
+        }
     }
 
     private html(): string {

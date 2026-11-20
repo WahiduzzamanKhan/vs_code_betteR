@@ -77,6 +77,45 @@ suite('betteR plots: R graphics in a VS Code pane, no httpgd', () => {
         assert.strictEqual(session.plots.plots.length, count, 'no new history entry');
     });
 
+    test('SVG fails cleanly when R cannot make SVGs, and plots keep working', async () => {
+        // CRAN's macOS R without XQuartz: svg() can't load Cairo, so it only
+        // warns and opens no device. Simulated in this session only.
+        await session.evaluate(`local({
+            ns <- asNamespace("grDevices")
+            options(better.test.svg = ns$svg)
+            unlockBinding("svg", ns)
+            assign("svg", function(...) {
+                warning("failed to load cairo DLL")
+                invisible(NULL)
+            }, envir = ns)
+            lockBinding("svg", ns)
+        })`);
+        const plot = session.plots.current!;
+        const count = session.plots.plots.length;
+        try {
+            await assert.rejects(
+                session.renderPlot(plot.commId, { width: 300, height: 200 }, 1, 'svg'),
+                process.platform === 'darwin' ? /SVG export needs XQuartz on macOS/ : /can't make SVG/,
+            );
+        } finally {
+            await session.evaluate(`local({
+                ns <- asNamespace("grDevices")
+                unlockBinding("svg", ns)
+                assign("svg", getOption("better.test.svg"), envir = ns)
+                lockBinding("svg", ns)
+                options(better.test.svg = NULL)
+            })`);
+        }
+        // PNG still renders, and the session's plots are as they were.
+        const png = await session.renderPlot(plot.commId, { width: 300, height: 200 }, 1, 'png');
+        assert.deepStrictEqual(pngSize(png.data), { width: 300, height: 200 });
+        const before = plot.image!.data;
+        session.execute('lines(1:10, rep(5, 10), col = "blue")');
+        await waitFor('plot update', () => plot.image?.data, (d) => !!d && d !== before);
+        assert.strictEqual(session.plots.plots.length, count, 'no new history entry');
+        assert.strictEqual(session.plots.current, plot);
+    });
+
     test('history keeps earlier plots; removing one frees it', async () => {
         const count = session.plots.plots.length;
         session.execute('hist(rnorm(100))');
