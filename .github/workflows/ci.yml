@@ -21,11 +21,11 @@ jobs:
     steps:
       # Side by side, as in development: the extension falls back to
       # ../betteR/target/debug/better.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: vs_code_betteR
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: WahiduzzamanKhan/betteR
           path: betteR
@@ -51,7 +51,7 @@ jobs:
         working-directory: betteR
         run: cargo build --locked
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
