@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { ArkDapBridge } from './dap';
 import { EnvironmentExplorer, EnvNode, rExpression } from './environment';
-import { Session } from './session';
+import { Session, trackConsoleFocus } from './session';
 
 /** Returned from `activate`; used by the integration tests. */
 export interface BetteRApi {
@@ -18,7 +18,7 @@ export function activate(context: vscode.ExtensionContext): BetteRApi {
     const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     status.command = 'betteR.openConsole';
     const explorer = new EnvironmentExplorer();
-    context.subscriptions.push(output, status, explorer);
+    context.subscriptions.push(output, status, explorer, trackConsoleFocus());
 
     const setStatus = (text: string, tooltip: string) => {
         status.text = text;

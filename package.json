@@ -121,6 +121,14 @@
         "command": "betteR.helpAtCursor",
         "key": "f1",
         "when": "editorTextFocus && editorLangId == r"
+      },
+      {
+        "command": "workbench.action.terminal.sendSequence",
+        "key": "shift+enter",
+        "args": {
+          "text": "\u001b\r"
+        },
+        "when": "terminalFocus && betteR.consoleShiftEnter && !config.terminal.integrated.enableKittyKeyboardProtocol"
       }
     ],
     "configuration": {

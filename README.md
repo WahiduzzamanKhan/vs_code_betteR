@@ -8,7 +8,7 @@ It works in standard VS Code and needs nothing installed into your R library: no
 
 ## Features
 
-- **A modern R console** in VS Code's terminal: syntax highlighting, completion that pops up as you type (from the live session, like the editor's) with each suggestion's help beside it, function signatures under the line, multi-line editing, history search, `readline()` prompts and Ctrl-C interrupts.
+- **A modern R console** in VS Code's terminal: syntax highlighting, completion that pops up as you type (from the live session, like the editor's) with each suggestion's help beside it, function signatures under the line, multi-line editing (Shift-Enter for a newline), history search, `readline()` prompts and Ctrl-C interrupts.
 - **Live-session editor intelligence:** completion (including data frame columns and functions you've defined), signature help and hover help, from the same session as the console.
 - **Run code RStudio-style:** **Cmd+Enter** (Ctrl+Enter on Linux and Windows) runs the whole statement at the cursor (a function definition, a pipe chain) or the selection, then moves to the next statement.
 - **Real debugging:** `browser()`, `debug()` and gutter breakpoints stop in VS Code's debugger on the actual line of your file, with the variables pane, call stack and step buttons. You can also step by typing `n` or `c` in the console.

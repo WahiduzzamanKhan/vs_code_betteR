@@ -48,6 +48,40 @@ function resolveBinary(setting: string, envVar: string | undefined, name: string
     return found;
 }
 
+/**
+ * Where VS Code's terminal can't report Shift-Enter apart from Enter (the
+ * kitty keyboard protocol is off: `terminal.integrated.enableKittyKeyboardProtocol`,
+ * which VS Code before 1.110 lacks or defaults off), the console's Shift-Enter
+ * keybinding (package.json) sends Alt-Enter's sequence instead; tells the
+ * console so its banner offers Shift-Enter. Windows reports Shift-Enter
+ * through the console API regardless.
+ */
+function shiftEnterEnv(): Record<string, string> {
+    const kitty = vscode.workspace.getConfiguration('terminal.integrated').get<boolean>('enableKittyKeyboardProtocol');
+    return process.platform !== 'win32' && !kitty ? { BETTER_SHIFT_ENTER: '1' } : {};
+}
+
+/** The console terminals of every session, including restarted ones. */
+const consoleTerminals = new WeakSet<vscode.Terminal>();
+
+/**
+ * Keeps the `betteR.consoleShiftEnter` context key, which scopes the console's
+ * Shift-Enter keybinding (package.json) to its terminal, up to date. It also
+ * leaves out consoles on Windows, which read Shift-Enter through the console
+ * API. That depends on where the console runs (the extension host), not on the
+ * UI's OS that `isWindows` reports, which differ in remote windows.
+ */
+export function trackConsoleFocus(): vscode.Disposable {
+    const update = (t: vscode.Terminal | undefined) =>
+        void vscode.commands.executeCommand(
+            'setContext',
+            'betteR.consoleShiftEnter',
+            process.platform !== 'win32' && t !== undefined && consoleTerminals.has(t),
+        );
+    update(vscode.window.activeTerminal);
+    return vscode.window.onDidChangeActiveTerminal(update);
+}
+
 /** Console input is mirrored into this LSP document for completion. */
 const CONSOLE_DOC_URI = 'untitled:better-console';
 
@@ -613,10 +647,11 @@ export class Session implements vscode.Disposable {
                 shellPath: this.consolePath,
                 shellArgs: ['--connection-file', this.connectionFile, '--ide', String(this.ide.port)],
                 // In the environment, not argv: other users can see process arguments.
-                env: { BETTER_IDE_TOKEN: this.ide.token },
+                env: { BETTER_IDE_TOKEN: this.ide.token, ...shiftEnterEnv() },
                 cwd: this.cwd,
                 iconPath: new vscode.ThemeIcon('terminal'),
             });
+            consoleTerminals.add(this.terminal);
         }
         this.terminal.show(preserveFocus);
         return this.terminal;
