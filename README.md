@@ -10,7 +10,7 @@ It works in standard VS Code and needs nothing installed into your R library: no
 
 - **A modern R console** in VS Code's terminal: syntax highlighting, completion that pops up as you type (from the live session, like the editor's) with each suggestion's help beside it, function signatures under the line, multi-line editing, history search, `readline()` prompts and Ctrl-C interrupts.
 - **Live-session editor intelligence:** completion (including data frame columns and functions you've defined), signature help and hover help, from the same session as the console.
-- **Run code RStudio-style:** **Cmd+Enter** (Ctrl+Enter on Linux) runs the whole statement at the cursor (a function definition, a pipe chain) or the selection, then moves to the next statement.
+- **Run code RStudio-style:** **Cmd+Enter** (Ctrl+Enter on Linux and Windows) runs the whole statement at the cursor (a function definition, a pipe chain) or the selection, then moves to the next statement.
 - **Real debugging:** `browser()`, `debug()` and gutter breakpoints stop in VS Code's debugger on the actual line of your file, with the variables pane, call stack and step buttons. You can also step by typing `n` or `c` in the console.
 - **Plots without httpgd:** an *R Plots* panel shows every plot sharp at its exact size, re-rendered when you resize the panel. It has history, Save as PNG/SVG, Remove and Clear.
 - **Interactive charts and apps:** plotly, leaflet and other htmlwidgets run live in the plots panel; DT tables, other widgets and Shiny apps run in an *R Viewer* panel.
@@ -21,14 +21,14 @@ It works in standard VS Code and needs nothing installed into your R library: no
 ## Requirements
 
 - **VS Code 1.106** or newer.
-- **R**, installed normally. Tested with R 4.3 and 4.6.
-- **The `better` console**, from [betteR](https://github.com/WahiduzzamanKhan/betteR). It contains the R engine ([ark](https://github.com/posit-dev/ark)) that the extension uses. It must be on your `PATH`, or set in `betteR.consolePath`.
-- **macOS or Linux.** Windows is not supported yet. betteR has been tested on macOS.
+- **R**, installed normally. Tested with R 4.3, 4.5 and 4.6.
+- **The `better` console**, from [betteR](https://github.com/WahiduzzamanKhan/betteR). It contains the R engine ([ark](https://github.com/posit-dev/ark)) that the extension uses. It must be on your `PATH` (as `better.exe` on Windows), or set in `betteR.consolePath`.
+- **macOS, Linux or Windows.** Tested on macOS (Apple silicon), Linux (Ubuntu, Fedora) and Windows 11 (x86-64 and ARM64).
 - **To build from source:** Node.js 20 or newer with npm.
 
 ## Installation
 
-1. **Install the `better` console** by following the [betteR README](https://github.com/WahiduzzamanKhan/betteR#installation) (`cargo install --path .`). Check it with:
+1. **Install the `better` console** by following the [betteR README](https://github.com/WahiduzzamanKhan/betteR#installation) (`cargo install --path .`; on Windows, its [`install.ps1`](https://github.com/WahiduzzamanKhan/betteR#windows) does everything). Check it with:
 
    ```sh
    better --version
@@ -46,9 +46,9 @@ It works in standard VS Code and needs nothing installed into your R library: no
 
 3. **Disable REditorSupport** (`reditorsupport.r`, the "R" extension) if you have it. It runs its own R language server that would compete with betteR's. In the Extensions view, choose *Disable (Workspace)* for projects where you use betteR, or disable it entirely.
 
-4. **Reload VS Code.**
+4. **Reload VS Code.** If you've just installed `better` or changed your `PATH`, quit VS Code completely and start it again instead, so it sees the new `PATH`.
 
-To update, pull the latest changes, run `npm run package` again and reinstall the `.vsix`. To uninstall, run `code --uninstall-extension better.better-vscode`.
+To update, pull the latest changes, run `npm run package` again and reinstall the `.vsix`. Update the `better` console at the same time (step 1): the extension and the console talk to each other, and versions from different times may not understand each other. To uninstall, run `code --uninstall-extension better.better-vscode`.
 
 ## Usage
 
@@ -128,13 +128,14 @@ All commands are in the Command Palette under **betteR**:
 
 | Setting | Default | Description |
 |---|---|---|
-| `betteR.consolePath` | *(empty)* | Path to the `better` binary. If empty, `better` on your `PATH` is used. |
+| `betteR.consolePath` | *(empty)* | Path to the `better` binary (`better.exe` on Windows). If empty, `better` on your `PATH` is used. |
 | `betteR.openConsoleOnStart` | `true` | Open the R terminal when the session starts. |
 | `betteR.arkPath` | *(empty)* | Advanced: use a separate ark build instead of the one inside `better`. |
 
 ## Troubleshooting
 
-- **"Could not find `better`"**: install the console and make sure `better --version` works in a terminal. If VS Code was started from the Dock and doesn't see your shell's `PATH`, set `betteR.consolePath` to the full path, for example `~/.cargo/bin/better`.
+- **"Could not find `better`"**: install the console and make sure `better --version` works in a terminal. VS Code reads `PATH` when it starts, so after installing `better` or changing `PATH`, quit VS Code completely (all windows) and start it again. If VS Code was started from the Dock and doesn't see your shell's `PATH`, set `betteR.consolePath` to the full path, for example `~/.cargo/bin/better`. On Windows, `cargo install` puts it in `%USERPROFILE%\.cargo\bin\better.exe`; only `better.exe` is used, not a `better.cmd` or `.bat` wrapper.
+- **The R session doesn't start on Windows** (the *betteR* output channel lists the session log): R must be on your `PATH`, or `R_HOME` set, before VS Code starts, because the R installer sets up neither. betteR's `install.ps1` offers to set `R_HOME`; see the [betteR Windows notes](https://github.com/WahiduzzamanKhan/betteR#windows). For conda's R, also set the user environment variable `BETTER_STANDARD_DLL_SEARCH=1`.
 - **Duplicate completions or errors from another R language server**: disable REditorSupport (see Installation).
 - **"The R session ended"**: R crashed or you ran `q()`. Choose *Restart R* in the notification. Session logs are listed in the *betteR* output channel (*View › Output*, then pick *betteR*).
 - **A breakpoint doesn't stop**: re-run the function definition with Cmd+Enter after setting the breakpoint, so R picks it up.
@@ -147,7 +148,7 @@ npm run compile
 npm test            # integration tests in a real VS Code (downloaded on first run)
 ```
 
-Open this folder in VS Code and press **F5** to start a development window with a sample workspace (`test-fixtures/workspace`). The development build looks for `better` on your `PATH`, then in `../betteR/target/debug/better`.
+Open this folder in VS Code and press **F5** to start a development window with a sample workspace (`test-fixtures/workspace`). The development build looks for `better` on your `PATH`, then in `../betteR/target/debug/better` (`better.exe` on Windows). On Linux without a display, run the tests as `xvfb-run -a npm test`. On macOS, the plot tests need [XQuartz](https://www.xquartz.org) (`brew install --cask xquartz`), because CRAN's R uses it for `svg()`.
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org). Architecture and design notes are in [docs/design.md](docs/design.md).
 
