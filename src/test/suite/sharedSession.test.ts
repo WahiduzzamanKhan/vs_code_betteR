@@ -182,7 +182,7 @@ suite('betteR: one live R session shared by console and editor', () => {
 
     test('a console speaking another protocol is told why and not used', async () => {
         const reported: string[] = [];
-        const listener = session.ide.onIncompatible((problem) => reported.push(problem));
+        const listener = session.ide.onIncompatible((problem) => reported.push(problem.message));
         try {
             for (const protocol of [undefined, PROTOCOL + 1]) {
                 const received = await new Promise<string>((resolve, reject) => {

@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
 import * as net from 'net';
 import * as vscode from 'vscode';
-import { protocolProblem } from './compat';
+import { ProtocolProblem, protocolProblem } from './compat';
 
 /** A message on the console channel (JSON lines over loopback TCP). */
 export type IdeMessage = { type: string; [key: string]: unknown };
@@ -29,8 +29,8 @@ export class IdeChannel implements vscode.Disposable {
     private readonly outbox: string[] = [];
     private readonly messages = new vscode.EventEmitter<IdeMessage>();
     readonly onMessage = this.messages.event;
-    private readonly incompatible = new vscode.EventEmitter<string>();
-    /** A console with the right token but another protocol; the message says what to update. */
+    private readonly incompatible = new vscode.EventEmitter<ProtocolProblem>();
+    /** A console with the right token but another protocol. */
     readonly onIncompatible = this.incompatible.event;
     /** Pass to the console as `BETTER_IDE_TOKEN`, never on its command line. */
     readonly token = crypto.randomBytes(16).toString('hex');
@@ -81,7 +81,7 @@ export class IdeChannel implements vscode.Disposable {
             if (problem) {
                 // Authenticated, so it's our console: tell it why (this message
                 // never changes, so every console understands it), then let go.
-                socket.end(JSON.stringify({ type: 'incompatible', message: problem }) + '\n');
+                socket.end(JSON.stringify({ type: 'incompatible', message: problem.message }) + '\n');
                 this.incompatible.fire(problem);
                 return;
             }

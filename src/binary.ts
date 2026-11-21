@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 /**
@@ -34,4 +35,21 @@ export function findOnPath(name: string, pathVar = process.env.PATH ?? ''): stri
         }
     }
     return undefined;
+}
+
+/**
+ * Where betteR's install scripts put `better`: `$CARGO_HOME/bin`, else
+ * `~/.cargo/bin` (also where `cargo install` puts it).
+ */
+export function installDir(env: NodeJS.ProcessEnv = process.env, home = os.homedir()): string {
+    return path.join(env.CARGO_HOME || path.join(home, '.cargo'), 'bin');
+}
+
+/**
+ * `name` (`name.exe` on Windows) in `installDir`. The install scripts add that
+ * directory to `PATH`, but VS Code keeps the `PATH` it started with, so a
+ * console installed since then is only found here.
+ */
+export function findInstalled(name: string, env: NodeJS.ProcessEnv = process.env, home = os.homedir()): string | undefined {
+    return existingFile(path.join(installDir(env, home), executableName(name)));
 }

@@ -6,10 +6,11 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { LanguageClient, LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node';
-import { executableName, existingFile, findOnPath } from './binary';
+import { executableName, existingFile, findInstalled, findOnPath } from './binary';
 import { failureReasonIn } from './arkLog';
-import { checkConsoleVersion } from './compat';
+import { ConsoleNeeded, checkConsoleVersion } from './compat';
 import { IdeChannel, IdeMessage } from './ide';
+import { offerInstall } from './install';
 import { DataExplorers } from './dataExplorer';
 import { HelpPanel } from './help';
 import { HtmlServer, isLocalUrl } from './htmlServer';
@@ -30,7 +31,11 @@ function freePort(): Promise<number> {
     });
 }
 
-/** Setting, then env var, then PATH, then a development build in a sibling checkout. */
+/**
+ * Setting, then env var, then PATH, then the install scripts' directory (not
+ * on VS Code's PATH right after installing), then a development build in a
+ * sibling checkout.
+ */
 function resolveBinary(setting: string, envVar: string | undefined, name: string, devPath: string): string {
     const configured = vscode.workspace.getConfiguration('betteR').get<string>(setting);
     const candidates = [configured, envVar ? process.env[envVar] : undefined];
@@ -43,9 +48,12 @@ function resolveBinary(setting: string, envVar: string | undefined, name: string
             return file;
         }
     }
-    const found = findOnPath(name) ?? existingFile(devPath);
+    const found = findOnPath(name) ?? findInstalled(name) ?? existingFile(devPath);
     if (!found) {
-        throw new Error(`Could not find \`${name}\`. Set betteR.${setting}.`);
+        throw new ConsoleNeeded(
+            `The betteR console (\`${name}\`) isn't installed, or isn't on PATH. Install it, or set betteR.${setting}.`,
+            'install',
+        );
     }
     return found;
 }
@@ -218,8 +226,12 @@ export class Session implements vscode.Disposable {
             this.promptStates,
             ide.onMessage((msg) => this.onIdeMessage(msg)),
             ide.onIncompatible((problem) => {
-                output.appendLine(problem);
-                void vscode.window.showErrorMessage(`betteR: ${problem}`);
+                output.appendLine(problem.message);
+                if (problem.update === 'console') {
+                    void offerInstall(problem.message, 'update');
+                } else {
+                    void vscode.window.showErrorMessage(`betteR: ${problem.message}`);
+                }
             }),
             vscode.window.onDidCloseTerminal((t) => {
                 if (t === this.terminal) {

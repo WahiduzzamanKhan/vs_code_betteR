@@ -34,9 +34,18 @@ suite('Compatibility with the console', () => {
 
     test('a different protocol says which side to update', () => {
         assert.strictEqual(protocolProblem(PROTOCOL), undefined);
-        assert.match(protocolProblem(undefined)!, /Update the betteR console/);
-        assert.match(protocolProblem(PROTOCOL - 1)!, /Update the betteR console/);
-        assert.match(protocolProblem(PROTOCOL + 1)!, /Update the betteR VS Code extension/);
-        assert.match(protocolProblem('1')!, /Update the betteR console/);
+        for (const [protocol, update] of [
+            [undefined, 'console'],
+            [PROTOCOL - 1, 'console'],
+            [PROTOCOL + 1, 'extension'],
+            ['1', 'console'],
+        ] as const) {
+            const problem = protocolProblem(protocol)!;
+            assert.strictEqual(problem.update, update, String(protocol));
+            assert.match(
+                problem.message,
+                update === 'console' ? /Update the betteR console/ : /Update the betteR VS Code extension/,
+            );
+        }
     });
 });

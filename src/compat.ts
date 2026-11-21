@@ -16,6 +16,20 @@ import * as fs from 'fs';
 export const PROTOCOL = 1;
 export const MIN_CONSOLE_VERSION = '0.1.0';
 
+/**
+ * The console has to be installed (`install`) or updated (`update`) before a
+ * session can start; the message says why. The extension offers the install
+ * command (`src/install.ts`).
+ */
+export class ConsoleNeeded extends Error {
+    constructor(
+        message: string,
+        readonly kind: 'install' | 'update',
+    ) {
+        super(message);
+    }
+}
+
 type Version = [number, number, number];
 
 /**
@@ -49,25 +63,33 @@ export function consoleVersionProblem(versionOutput: string, consolePath: string
     }
     return (
         `The betteR console at ${consolePath} is version ${version}, too old for this extension, ` +
-        `which needs ${MIN_CONSOLE_VERSION} or newer. Update \`better\`.`
+        `which needs ${MIN_CONSOLE_VERSION} or newer.`
     );
 }
 
+/** A console that speaks another protocol: what to tell the user and the console, and which side to update. */
+export interface ProtocolProblem {
+    message: string;
+    update: 'console' | 'extension';
+}
+
 /**
- * What to tell the user and the console when the console's `hello` carries
- * `protocol` (`undefined` from consoles before the field existed), or
- * `undefined` if it matches.
+ * The problem when the console's `hello` carries `protocol` (`undefined`
+ * from consoles before the field existed), or `undefined` if it matches.
  */
-export function protocolProblem(protocol: unknown): string | undefined {
+export function protocolProblem(protocol: unknown): ProtocolProblem | undefined {
     if (protocol === PROTOCOL) {
         return undefined;
     }
     const theirs = typeof protocol === 'number' ? protocol : undefined;
-    const update = theirs !== undefined && theirs > PROTOCOL ? 'the betteR VS Code extension' : 'the betteR console (`better`)';
-    return (
-        `The betteR console and the VS Code extension can't work together: the console speaks ` +
-        `protocol ${theirs ?? '0 (before versioning)'}, the extension protocol ${PROTOCOL}. Update ${update}.`
-    );
+    const update = theirs !== undefined && theirs > PROTOCOL ? 'extension' : 'console';
+    const name = update === 'extension' ? 'the betteR VS Code extension' : 'the betteR console (`better`)';
+    return {
+        message:
+            `The betteR console and the VS Code extension can't work together: the console speaks ` +
+            `protocol ${theirs ?? '0 (before versioning)'}, the extension protocol ${PROTOCOL}. Update ${name}.`,
+        update,
+    };
 }
 
 const checked = new Map<string, string>();
@@ -106,6 +128,6 @@ export async function checkConsoleVersion(consolePath: string, log: (line: strin
     }
     const problem = consoleVersionProblem(output, consolePath);
     if (problem) {
-        throw new Error(problem);
+        throw new ConsoleNeeded(problem, 'update');
     }
 }

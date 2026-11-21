@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import { ArkDapBridge } from './dap';
+import { ConsoleNeeded } from './compat';
+import { offerInstall } from './install';
 import { EnvironmentExplorer, EnvNode, rExpression } from './environment';
 import { Session, trackConsoleFocus } from './session';
 
@@ -55,7 +57,11 @@ export function activate(context: vscode.ExtensionContext): BetteRApi {
             (err: Error) => {
                 setStatus('$(error) R', err.message);
                 output.appendLine(`Failed to start R session: ${err.message}`);
-                void vscode.window.showErrorMessage(`betteR: ${err.message}`);
+                if (err instanceof ConsoleNeeded) {
+                    void offerInstall(err.message, err.kind);
+                } else {
+                    void vscode.window.showErrorMessage(`betteR: ${err.message}`);
+                }
             },
         );
         current = starting;

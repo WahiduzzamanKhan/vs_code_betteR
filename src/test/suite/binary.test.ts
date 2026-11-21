@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { existingFile, findOnPath } from '../../binary';
+import { existingFile, findInstalled, findOnPath, installDir } from '../../binary';
 
 /** Runs `fn` as if on `platform`; only `process.platform` changes. */
 function as<T>(platform: NodeJS.Platform, fn: () => T): T {
@@ -66,5 +66,28 @@ suite('betteR: finding the better binary', () => {
         const exeOnly = dir('exe-only', ['better.exe']);
         assert.strictEqual(as('darwin', () => findOnPath('better', pathVar(exeOnly, bin))), path.join(bin, 'better'));
         assert.strictEqual(as('linux', () => existingFile(path.join(exeOnly, 'better'))), undefined);
+    });
+
+    test('a console the install script put in $CARGO_HOME/bin or ~/.cargo/bin is found without PATH', () => {
+        const home = dir('home');
+        dir(path.join('home', '.cargo', 'bin'), ['better', 'better.exe']);
+        const cargoHome = dir('cargo-home');
+        dir(path.join('cargo-home', 'bin'), ['better']);
+        assert.strictEqual(installDir({}, home), path.join(home, '.cargo', 'bin'));
+        assert.strictEqual(installDir({ CARGO_HOME: cargoHome }, home), path.join(cargoHome, 'bin'));
+        assert.strictEqual(
+            as('linux', () => findInstalled('better', {}, home)),
+            path.join(home, '.cargo', 'bin', 'better'),
+        );
+        assert.strictEqual(
+            as('win32', () => findInstalled('better', {}, home)),
+            path.join(home, '.cargo', 'bin', 'better.exe'),
+        );
+        assert.strictEqual(
+            as('linux', () => findInstalled('better', { CARGO_HOME: cargoHome }, home)),
+            path.join(cargoHome, 'bin', 'better'),
+        );
+        assert.strictEqual(as('win32', () => findInstalled('better', { CARGO_HOME: cargoHome }, home)), undefined);
+        assert.strictEqual(findInstalled('better', {}, dir('empty-home')), undefined);
     });
 });
