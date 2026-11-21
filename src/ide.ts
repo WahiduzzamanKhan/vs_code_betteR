@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
 import * as net from 'net';
 import * as vscode from 'vscode';
+import { protocolProblem } from './compat';
 
 /** A message on the console channel (JSON lines over loopback TCP). */
 export type IdeMessage = { type: string; [key: string]: unknown };
@@ -15,8 +16,10 @@ const HELLO_MAX_BYTES = 4096;
  *
  * Any local user can connect to a loopback port, so the console proves itself
  * with a token it gets in `BETTER_IDE_TOKEN`: its first line must be
- * `{"type":"hello","token":"…"}`. Other connections are closed without ever
- * becoming the console.
+ * `{"type":"hello","token":"…","protocol":N}`. Other connections are closed
+ * without ever becoming the console. A console with the right token but
+ * another protocol (`compat.ts`) is told why with `incompatible`, closed, and
+ * reported through `onIncompatible`.
  *
  * Messages sent while no console is connected are queued and delivered when
  * one connects, so Run Selection works while the console is still starting.
@@ -26,6 +29,9 @@ export class IdeChannel implements vscode.Disposable {
     private readonly outbox: string[] = [];
     private readonly messages = new vscode.EventEmitter<IdeMessage>();
     readonly onMessage = this.messages.event;
+    private readonly incompatible = new vscode.EventEmitter<string>();
+    /** A console with the right token but another protocol; the message says what to update. */
+    readonly onIncompatible = this.incompatible.event;
     /** Pass to the console as `BETTER_IDE_TOKEN`, never on its command line. */
     readonly token = crypto.randomBytes(16).toString('hex');
 
@@ -66,8 +72,17 @@ export class IdeChannel implements vscode.Disposable {
             }
             socket.off('data', onData);
             clearTimeout(timer);
-            if (!this.isValidHello(pending.slice(0, newline))) {
+            const hello = this.validHello(pending.slice(0, newline));
+            if (!hello) {
                 socket.destroy();
+                return;
+            }
+            const problem = protocolProblem(hello.protocol);
+            if (problem) {
+                // Authenticated, so it's our console: tell it why (this message
+                // never changes, so every console understands it), then let go.
+                socket.end(JSON.stringify({ type: 'incompatible', message: problem }) + '\n');
+                this.incompatible.fire(problem);
                 return;
             }
             this.attach(socket, pending.slice(newline + 1));
@@ -75,20 +90,21 @@ export class IdeChannel implements vscode.Disposable {
         socket.on('data', onData);
     }
 
-    private isValidHello(line: string): boolean {
-        let msg: unknown;
+    /** The `hello` on `line` if its token matches, else `undefined`. */
+    private validHello(line: string): { protocol?: unknown } | undefined {
+        let msg: { type?: unknown; token?: unknown; protocol?: unknown } | null;
         try {
             msg = JSON.parse(line);
         } catch {
-            return false;
+            return undefined;
         }
-        const token = (msg as { type?: unknown; token?: unknown } | null)?.token;
-        if ((msg as { type?: unknown } | null)?.type !== 'hello' || typeof token !== 'string') {
-            return false;
+        const token = msg?.token;
+        if (msg?.type !== 'hello' || typeof token !== 'string') {
+            return undefined;
         }
         const given = Buffer.from(token, 'utf8');
         const expected = Buffer.from(this.token, 'utf8');
-        return given.length === expected.length && crypto.timingSafeEqual(given, expected);
+        return given.length === expected.length && crypto.timingSafeEqual(given, expected) ? msg : undefined;
     }
 
     /** Makes an authenticated socket the console. `pending` is what followed its `hello`. */
@@ -136,5 +152,6 @@ export class IdeChannel implements vscode.Disposable {
         this.socket?.destroy();
         this.server.close();
         this.messages.dispose();
+        this.incompatible.dispose();
     }
 }

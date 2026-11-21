@@ -22,6 +22,7 @@ VS Code extension ── spawns `better --kernel` (ark built in), owns kernel.js
 
 - **No ZeroMQ in Node.** The extension never speaks Jupyter itself. `better --lsp-stdio` bridges ark's LSP to stdio for `vscode-languageclient`. The console talks to the extension over JSON lines on loopback TCP (the IDE channel), and the debugger uses a small in-process DAP bridge to ark's TCP port. There are no native modules.
 - **The IDE channel is loopback TCP with a token.** The extension listens on `127.0.0.1`, on a port the OS picks, and starts the console with `--ide <port>`. It passes a random token (16 bytes, hex) in the terminal's environment as `BETTER_IDE_TOKEN`, not in argv, where other users could see it. Any local user can connect to a loopback port, so the console's first line must be `{"type":"hello","token":"…"}`. The extension compares tokens with `crypto.timingSafeEqual`, and closes a connection whose first line isn't a matching hello, that sends more than 4 KB without a newline, or that sends nothing for 10 s. Only an authenticated connection replaces the current console and receives queued messages. Both ends set `TCP_NODELAY`, because completion requests are small and latency-sensitive. TCP rather than a Unix socket because Node on Windows can only listen on named pipes, not file paths.
+- **The extension and the console check that they fit together.** They are installed separately, so they can come from different releases (`src/compat.ts`). Before starting anything, the extension runs `better --version` and refuses a console older than `MIN_CONSOLE_VERSION`, which would lack flags the extension passes (`--kernel`, `--lsp-stdio`, `--shutdown`); output it can't read is logged and allowed. The result is kept per binary (path, size, modification time). The console's hello also carries `protocol`, the version of the channel's messages. With the right token but another protocol (or none, from consoles before it existed), the extension answers `{"type":"incompatible","message":"…"}`, closes the connection, and shows the same message, which says whether the console or the extension needs updating. The console prints it and keeps working on its own. That message never changes, so every console understands it. Whenever `PROTOCOL` changes, `MIN_CONSOLE_VERSION` rises to the first console that speaks it. Versions follow semantic versioning; while at 0.x, a minor bump marks a breaking change.
 - **One LSP client per kernel.** Ark sends live-state updates (console scopes, virtual documents) only to its newest LSP connection. When hosted, the console therefore asks the extension for completions instead of opening its own LSP, so the editor's connection receives everything. This is what makes `ark:` documents openable.
 - **The console owns ark's debugger comm**, because ark runs Step and Continue as console input ("as if typed"). When you click Step, ark sends the console `execute n`; the console wakes from line editing, echoes `Browse[1]> n` and runs it. Run Selection works the same way: the code is echoed one expression per prompt, with your half-typed input preserved.
 - **Run Selection carries a file location** (`positron.code_location`, UTF-8 columns). Ark attaches srcrefs into that file and injects breakpoints, so the debugger shows the real line.
@@ -45,8 +46,9 @@ The tests open a copy of `test-fixtures/workspace` in a real VS Code with other 
 4. *Run Selection* runs code in the console that creates a name only the live session can know, and the editor then completes it.
 5. The console's signature help request (`signature`) is answered through the editor's language client: `mean(1:10, )` gives `mean(x, ...)` with the second parameter active.
 6. The console's request for a completion's help (`resolve`) is answered the same way: `mean` comes back with its help page.
-7. The console channel closes connections that send a wrong or partial token, another message first, garbage or an over-long line, without sending them anything; the real console keeps working (the next test runs code through it).
-8. The installed R package set and all project files, including `renv.lock`, are unchanged.
+7. The console channel closes connections that send a wrong or partial token, another message first, garbage or an over-long line, without sending them anything.
+8. A connection with the right token but no protocol, or a newer one, gets one `incompatible` message saying which side to update, is closed, and is reported to the user; the real console keeps working (the next test runs code through it).
+9. The installed R package set and all project files, including `renv.lock`, are unchanged.
 
 **Console keys (Unix):**
 1. The console's banner offers Shift-Enter: VS Code's terminal answers its kitty keyboard protocol query (the extension doesn't tell it here, since the protocol is on).
@@ -93,6 +95,10 @@ These tests use a hand-built page laid out like an htmlwidget, so no R packages 
 6. *View Data* in the Environment view opens `head(mtcars)` with its row names.
 7. `rm()` of the variable marks the tab as closed.
 
+
+**Compatibility with the console:**
+1. Versions are read from `better --version` output (a pre-release counts as its release); a console below `MIN_CONSOLE_VERSION` is refused with a message naming both versions, newer ones and unreadable output are not.
+2. A different protocol says which side to update: the console when it's older or has none, the extension when the console's is newer.
 
 **Finding `better`:**
 1. On Windows, `better.exe` is found on `PATH` after empty and quoted entries; `better.cmd`, `better.bat` and an extensionless `better` are not used, nor is a directory named `better.exe`. A configured path may leave out `.exe`. Elsewhere the plain name is used. (These run the Windows logic on any OS by setting `process.platform`.)

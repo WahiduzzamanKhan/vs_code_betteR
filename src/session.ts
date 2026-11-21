@@ -7,6 +7,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { LanguageClient, LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node';
 import { executableName, existingFile, findOnPath } from './binary';
+import { checkConsoleVersion } from './compat';
 import { IdeChannel, IdeMessage } from './ide';
 import { DataExplorers } from './dataExplorer';
 import { HelpPanel } from './help';
@@ -215,6 +216,10 @@ export class Session implements vscode.Disposable {
             this.variablesEvents,
             this.promptStates,
             ide.onMessage((msg) => this.onIdeMessage(msg)),
+            ide.onIncompatible((problem) => {
+                output.appendLine(problem);
+                void vscode.window.showErrorMessage(`betteR: ${problem}`);
+            }),
             vscode.window.onDidCloseTerminal((t) => {
                 if (t === this.terminal) {
                     this.terminal = undefined;
@@ -259,6 +264,8 @@ export class Session implements vscode.Disposable {
             throw new Error(`ark not found at ${arkOverride}`);
         }
         const [kernelCommand, kernelArgs] = arkOverride ? [arkOverride, []] : [consolePath, ['--kernel']];
+        // Installed separately, so it may be from an older release.
+        await checkConsoleVersion(consolePath, (line) => output.appendLine(line));
 
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'better-vscode-'));
         const connectionFile = path.join(dir, 'kernel.json');

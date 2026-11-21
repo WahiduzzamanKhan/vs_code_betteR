@@ -6,6 +6,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import type { BetteRApi } from '../../extension';
 import type { Session } from '../../session';
+import { PROTOCOL } from '../../compat';
 
 const workspace = () => vscode.workspace.workspaceFolders![0].uri.fsPath;
 
@@ -177,6 +178,40 @@ suite('betteR: one live R session shared by console and editor', () => {
         ]) {
             assert.strictEqual(await attempt(data), '', 'nothing is sent before a valid hello');
         }
+    });
+
+    test('a console speaking another protocol is told why and not used', async () => {
+        const reported: string[] = [];
+        const listener = session.ide.onIncompatible((problem) => reported.push(problem));
+        try {
+            for (const protocol of [undefined, PROTOCOL + 1]) {
+                const received = await new Promise<string>((resolve, reject) => {
+                    const socket = net.connect(session.ide.port, '127.0.0.1');
+                    let data = '';
+                    socket.setEncoding('utf8');
+                    socket.on('data', (chunk: string) => (data += chunk));
+                    socket.on('connect', () =>
+                        socket.write(JSON.stringify({ type: 'hello', token: session.ide.token, protocol }) + '\n'),
+                    );
+                    socket.on('close', () => resolve(data));
+                    socket.on('error', () => undefined);
+                    setTimeout(() => {
+                        socket.destroy();
+                        reject(new Error(`console with protocol ${protocol} was not closed`));
+                    }, 5_000);
+                });
+                const lines = received.trim().split('\n').map((l) => JSON.parse(l));
+                assert.strictEqual(lines.length, 1, received);
+                assert.strictEqual(lines[0].type, 'incompatible');
+                assert.match(lines[0].message, /protocol/);
+            }
+            assert.strictEqual(reported.length, 2);
+            assert.match(reported[0], /Update the betteR console/);
+            assert.match(reported[1], /Update the betteR VS Code extension/);
+        } finally {
+            listener.dispose();
+        }
+        // The real console is still attached: the next test runs code through it.
     });
 
     test('Run Selection sends editor code to the console session', async () => {
