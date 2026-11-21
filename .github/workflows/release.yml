@@ -1,0 +1,55 @@
+name: Release
+
+# A version tag (v0.2.0, or v0.2.0-rc.1 for a pre-release) packages the
+# extension and publishes the VSIX on a GitHub Release. One VSIX serves every
+# OS: the extension has no native code. Its file name carries no version, so
+# releases/latest/download/better-vscode.vsix is always the newest release.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  vsix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - run: npm ci
+
+      - name: Check that the tag matches package.json
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME, but package.json says version $version"
+            exit 1
+          fi
+
+      - run: npm run package
+
+      - name: Check the VSIX
+        run: |
+          unzip -l better-vscode.vsix > contents.txt
+          for f in extension/package.json extension/out/extension.js extension/out/session.js \
+                   extension/node_modules/vscode-languageclient/package.json; do
+            grep -q " $f\$" contents.txt || { echo "::error::$f is missing from the VSIX"; exit 1; }
+          done
+          if grep -qE ' extension/(src|out/test|test-fixtures|\.github)/' contents.txt; then
+            echo "::error::The VSIX contains development files"; exit 1
+          fi
+          tail -1 contents.txt
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=
+          case "$GITHUB_REF_NAME" in *-*) prerelease=--prerelease ;; esac
+          gh release create "$GITHUB_REF_NAME" better-vscode.vsix \
+            --verify-tag --title "$GITHUB_REF_NAME" --generate-notes $prerelease

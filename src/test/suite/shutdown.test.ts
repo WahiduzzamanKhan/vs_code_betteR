@@ -35,6 +35,11 @@ suite('betteR: shutting R down', () => {
         if (process.platform === 'win32') {
             this.skip(); // The stand-in kernel is a shell script.
         }
+        // Replaces a vscode.window function, which only reaches an extension
+        // loaded from this repo (see BETTER_TEST_EXTENSION in runTest.ts).
+        if (process.env.BETTER_TEST_EXTENSION) {
+            this.skip();
+        }
         this.timeout(120_000);
         const api = await vscode.extensions.getExtension<BetteRApi>('better.better-vscode')!.activate();
         // A stand-in for ark that fails at startup the way ark does with R 4.1.

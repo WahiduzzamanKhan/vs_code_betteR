@@ -40,7 +40,15 @@ function rTempDirs(): Set<string> {
 }
 
 async function main(): Promise<void> {
-    const extensionDevelopmentPath = path.resolve(__dirname, '../../');
+    const repo = path.resolve(__dirname, '../../');
+    // BETTER_TEST_EXTENSION: run the tests against another copy of the
+    // extension, e.g. the `extension/` folder of an unpacked VSIX, to check
+    // what is shipped. The tests and the workspace still come from the repo;
+    // tests that replace `vscode.window` functions skip themselves, since VS
+    // Code gives each extension its own copy of the API.
+    const extensionDevelopmentPath = process.env.BETTER_TEST_EXTENSION
+        ? path.resolve(process.env.BETTER_TEST_EXTENSION)
+        : repo;
     const extensionTestsPath = path.resolve(__dirname, './suite/index');
 
     // Kernels of betteR windows already open (e.g. the developer's own) aren't ours.
@@ -49,7 +57,7 @@ async function main(): Promise<void> {
 
     // Work on a copy so anything R writes can't touch the repo fixture.
     const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'better-ws-'));
-    fs.cpSync(path.join(extensionDevelopmentPath, 'test-fixtures/workspace'), workspace, { recursive: true });
+    fs.cpSync(path.join(repo, 'test-fixtures/workspace'), workspace, { recursive: true });
 
     try {
         await runTests({

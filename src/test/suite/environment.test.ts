@@ -91,7 +91,12 @@ suite('betteR environment explorer: the live session in the side bar', () => {
         session.execute('detach("package:tools")');
     });
 
-    test('removing an object updates the view at once, without running anything', async () => {
+    test('removing an object updates the view at once, without running anything', async function () {
+        // Replaces a vscode.window function, which only reaches an extension
+        // loaded from this repo (see BETTER_TEST_EXTENSION in runTest.ts).
+        if (process.env.BETTER_TEST_EXTENSION) {
+            this.skip();
+        }
         session.execute('env_gone <- 1');
         const node = await waitFor('env_gone listed', () => varNamed(envRoots(), 'env_gone'), (n) => !!n);
         const confirm = vscode.window.showWarningMessage;
@@ -112,7 +117,12 @@ suite('betteR environment explorer: the live session in the side bar', () => {
         session.execute('rm(env_gone)');
     });
 
-    test('hidden objects show on request and can be removed', async () => {
+    test('hidden objects show on request and can be removed', async function () {
+        // Replaces a vscode.window function, which only reaches an extension
+        // loaded from this repo (see BETTER_TEST_EXTENSION in runTest.ts).
+        if (process.env.BETTER_TEST_EXTENSION) {
+            this.skip();
+        }
         session.execute('.env_hidden <- list(1, 2)');
         await explorer.setShowHidden(true);
         const hidden = await waitFor(
