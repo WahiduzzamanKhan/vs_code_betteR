@@ -21,34 +21,61 @@ It works in standard VS Code and needs nothing installed into your R library: no
 ## Requirements
 
 - **VS Code 1.106** or newer.
-- **R**, installed normally. Tested with R 4.3, 4.5 and 4.6.
-- **The `better` console**, from [betteR](https://github.com/WahiduzzamanKhan/betteR). It contains the R engine ([ark](https://github.com/posit-dev/ark)) that the extension uses. It must be on your `PATH` (as `better.exe` on Windows), or set in `betteR.consolePath`.
-- **macOS, Linux or Windows.** Tested on macOS (Apple silicon), Linux (Ubuntu, Fedora) and Windows 11 (x86-64 and ARM64).
-- **To build from source:** Node.js 20 or newer with npm.
+- **R 4.2** or newer, installed normally. Tested with R 4.3, 4.5 and 4.6.
+- **The `better` console**, from [betteR](https://github.com/WahiduzzamanKhan/betteR). It contains the R engine ([ark](https://github.com/posit-dev/ark)) that the extension uses. Installing it takes one command (step 1 below).
+- **macOS, Linux or Windows**, on x86-64 or ARM64. Tested on macOS (Apple silicon), Linux (Ubuntu, Fedora) and Windows 11 (x86-64 and ARM64).
 
 ## Installation
 
-1. **Install the `better` console** by following the [betteR README](https://github.com/WahiduzzamanKhan/betteR#installation) (`cargo install --path .`; on Windows, its [`install.ps1`](https://github.com/WahiduzzamanKhan/betteR#windows) does everything). Check it with:
+1. **Install the `better` console.** On macOS and Linux:
 
    ```sh
-   better --version
+   curl --proto '=https' --tlsv1.2 -LsSf https://github.com/WahiduzzamanKhan/betteR/releases/latest/download/better-installer.sh | sh
    ```
 
-2. **Build and install the extension:**
+   On Windows, in PowerShell:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -c "irm https://github.com/WahiduzzamanKhan/betteR/releases/latest/download/better-installer.ps1 | iex"
+   ```
+
+   This installs `better` into `~/.cargo/bin` (`%USERPROFILE%\.cargo\bin` on Windows). Open a new terminal and check it with `better --version`. On Windows, R also needs to be findable: see [betteR's Windows notes](https://github.com/WahiduzzamanKhan/betteR#windows). The [betteR README](https://github.com/WahiduzzamanKhan/betteR#installation) lists the supported platforms and other ways to install. If you skip this step, the extension offers to run the command for you when it can't find `better`.
+
+2. **Install the extension.** Download `better-vscode.vsix` from the [latest release](https://github.com/WahiduzzamanKhan/vs_code_betteR/releases/latest), then either run:
 
    ```sh
-   git clone https://github.com/WahiduzzamanKhan/vs_code_betteR.git
-   cd vs_code_betteR
-   npm install
-   npm run package
    code --install-extension better-vscode.vsix
    ```
+
+   or, in the Extensions view, open the **…** menu and choose *Install from VSIX…*.
 
 3. **Disable REditorSupport** (`reditorsupport.r`, the "R" extension) if you have it. It runs its own R language server that would compete with betteR's. In the Extensions view, choose *Disable (Workspace)* for projects where you use betteR, or disable it entirely.
 
 4. **Reload VS Code.** If you've just installed `better` or changed your `PATH`, quit VS Code completely and start it again instead, so it sees the new `PATH`.
 
-To update, pull the latest changes, run `npm run package` again and reinstall the `.vsix`. Update the `better` console at the same time (step 1): the extension and the console talk to each other, and versions from different times may not understand each other. To uninstall, run `code --uninstall-extension better.better-vscode`.
+The `better` console isn't signed yet. On macOS the install script isn't affected; on Windows, SmartScreen may warn. See [betteR's notes on unsigned binaries](https://github.com/WahiduzzamanKhan/betteR#unsigned-binaries).
+
+### Updating and uninstalling
+
+To update, download the new `better-vscode.vsix` and install it the same way.
+
+Keep the extension and the console on the same minor version: extension 0.2.x works with console 0.2.x. While betteR is at 0.x, a new minor version (0.2 → 0.3) can change how the two talk to each other, and patch versions (0.2.0 → 0.2.1) don't. If the console is too old, the extension says so and offers to update it; if the extension is too old, it says to update the extension.
+
+To uninstall, run `code --uninstall-extension better.better-vscode`.
+
+## Build from source
+
+You need Node.js 20 or newer with npm.
+
+```sh
+git clone https://github.com/WahiduzzamanKhan/vs_code_betteR.git
+cd vs_code_betteR
+npm install
+npm run package
+code --install-extension better-vscode.vsix
+```
+
+To update, pull the latest changes, run `npm run package` again and reinstall the `.vsix`. To build the console from source too, see [betteR's *Build from source*](https://github.com/WahiduzzamanKhan/betteR#build-from-source).
 
 ## Usage
 
@@ -134,9 +161,9 @@ All commands are in the Command Palette under **betteR**:
 
 ## Troubleshooting
 
-- **"Could not find `better`"**: install the console and make sure `better --version` works in a terminal. VS Code reads `PATH` when it starts, so after installing `better` or changing `PATH`, quit VS Code completely (all windows) and start it again. If VS Code was started from the Dock and doesn't see your shell's `PATH`, set `betteR.consolePath` to the full path, for example `~/.cargo/bin/better`. On Windows, `cargo install` puts it in `%USERPROFILE%\.cargo\bin\better.exe`; only `better.exe` is used, not a `better.cmd` or `.bat` wrapper.
-- **The R session doesn't start on Windows** (the *betteR* output channel lists the session log): R must be on your `PATH`, or `R_HOME` set, before VS Code starts, because the R installer sets up neither. betteR's `install.ps1` offers to set `R_HOME`; see the [betteR Windows notes](https://github.com/WahiduzzamanKhan/betteR#windows). For conda's R, also set the user environment variable `BETTER_STANDARD_DLL_SEARCH=1`.
-- **Duplicate completions or errors from another R language server**: disable REditorSupport (see Installation).
+- **"Could not find `better`"**: install the console and make sure `better --version` works in a terminal. VS Code reads `PATH` when it starts, so after installing `better` or changing `PATH`, quit VS Code completely (all windows) and start it again. If VS Code was started from the Dock and doesn't see your shell's `PATH`, set `betteR.consolePath` to the full path, for example `~/.cargo/bin/better`. On Windows, the install script and `cargo install` both put it in `%USERPROFILE%\.cargo\bin\better.exe`; only `better.exe` is used, not a `better.cmd` or `.bat` wrapper.
+- **The R session doesn't start on Windows** (the *betteR* output channel lists the session log): R must be on your `PATH`, or `R_HOME` set, before VS Code starts, because the R installer sets up neither. See the [betteR Windows notes](https://github.com/WahiduzzamanKhan/betteR#windows) for setting `R_HOME`. For conda's R, also set the user environment variable `BETTER_STANDARD_DLL_SEARCH=1`.
+- **Duplicate completions or errors from another R language server**: disable REditorSupport (see [Installation](#installation)).
 - **"The R session ended"**: R crashed or you ran `q()`. Choose *Restart R* in the notification. Session logs are listed in the *betteR* output channel (*View › Output*, then pick *betteR*).
 - **A breakpoint doesn't stop**: re-run the function definition with Cmd+Enter after setting the breakpoint, so R picks it up.
 
