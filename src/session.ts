@@ -7,6 +7,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { LanguageClient, LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node';
 import { executableName, existingFile, findOnPath } from './binary';
+import { failureReasonIn } from './arkLog';
 import { checkConsoleVersion } from './compat';
 import { IdeChannel, IdeMessage } from './ide';
 import { DataExplorers } from './dataExplorer';
@@ -326,6 +327,11 @@ export class Session implements vscode.Disposable {
         await client.start();
         output.appendLine('Language client connected to ark.');
         return session;
+    }
+
+    /** Why the kernel stopped, from its log, if it says. */
+    exitReason(): string | undefined {
+        return failureReasonIn(this.logFile);
     }
 
     get isRunning(): boolean {

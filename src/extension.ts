@@ -27,10 +27,14 @@ export function activate(context: vscode.ExtensionContext): BetteRApi {
     };
 
     const onUnexpectedExit = (session: Session) => {
-        setStatus('$(debug-disconnect) R', 'R session ended');
+        const reason = session.exitReason();
+        setStatus('$(debug-disconnect) R', reason ? `R session ended: ${reason}` : 'R session ended');
         explorer.attach(undefined);
+        if (reason) {
+            output.appendLine(`R session ended: ${reason}`);
+        }
         void vscode.window
-            .showWarningMessage('The R session ended.', 'Restart R')
+            .showWarningMessage(reason ? `The R session ended: ${reason}` : 'The R session ended.', 'Restart R')
             .then((choice) => choice && vscode.commands.executeCommand('betteR.restart'));
         void session.dispose();
     };

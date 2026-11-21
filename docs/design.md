@@ -100,11 +100,14 @@ These tests use a hand-built page laid out like an htmlwidget, so no R packages 
 1. Versions are read from `better --version` output (a pre-release counts as its release); a console below `MIN_CONSOLE_VERSION` is refused with a message naming both versions, newer ones and unreadable output are not.
 2. A different protocol says which side to update: the console when it's older or has none, the extension when the console's is newer.
 
+**Why the kernel stopped** (`src/arkLog.ts`, like the console's `arklog.rs`, from real logs): a panic gives its message (also with Windows line endings); quoted R code is left out of a multi-line message (`Error evaluating '<code>': …`); without a panic the last `ERROR` line is used; long reasons are cut at 400 characters.
+
 **Finding `better`:**
 1. On Windows, `better.exe` is found on `PATH` after empty and quoted entries; `better.cmd`, `better.bat` and an extensionless `better` are not used, nor is a directory named `better.exe`. A configured path may leave out `.exe`. Elsewhere the plain name is used. (These run the Windows logic on any OS by setting `process.platform`.)
 
 **Shutting R down** (runs last, since it restarts R):
 1. *Restart R* lets R quit cleanly: a `.Last` defined in the session runs and R's `tempdir()` is removed, and the new session evaluates code.
-2. Windows process memory is parsed from `tasklist` output in English, German and French number formats; "no tasks" gives none.
+2. A kernel that dies says why: with `betteR.arkPath` set to a stand-in that writes ark's R-version panic to its log and exits, the warning reads "The R session ended: Unsupported R version 4.1.2. Ark requires R >= 4.2.0"; R then restarts with the real kernel. (Not on Windows: the stand-in is a shell script.)
+3. Windows process memory is parsed from `tasklist` output in English, German and French number formats; "no tasks" gives none.
 
 **After VS Code exits** (`runTest.ts`, on every OS): no betteR kernel started during the run is still running (kernels of other betteR windows, listed before the run, are ignored), and no new `Rtmp*` directory is left in the temp directory, which would mean an R was killed rather than shut down. Processes are listed with `ps`, or on Windows with `Get-CimInstance Win32_Process`.
