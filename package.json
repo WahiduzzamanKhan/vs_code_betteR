@@ -2,7 +2,7 @@
   "name": "better-vscode",
   "displayName": "betteR",
   "description": "One live R session (ark) shared by the terminal console, the editor, the debugger and a plot pane. No R packages installed into your project.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "better",
   "license": "MIT",
   "repository": {

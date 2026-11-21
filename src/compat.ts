@@ -14,7 +14,7 @@ import * as fs from 'fs';
  * console release that speaks it, and bump the console's `PROTOCOL` to match.
  */
 export const PROTOCOL = 1;
-export const MIN_CONSOLE_VERSION = '0.1.0';
+export const MIN_CONSOLE_VERSION = '0.2.0';
 
 /**
  * The console has to be installed (`install`) or updated (`update`) before a
