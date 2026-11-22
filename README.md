@@ -6,6 +6,8 @@ betteR runs **one live R session** per VS Code window and connects every part of
 
 It works in standard VS Code and needs nothing installed into your R library: no `languageserver`, `httpgd` or other helper packages, so your `renv.lock` stays clean.
 
+![betteR for VS Code: completion from the live session in the editor, View(df) in the data explorer, the R Session side bar, stepping through browser(), help for mean in the R Help panel, signature help while typing, and a histogram in the R Plots panel](docs/media/vs_code_betteR_demo.gif)
+
 ## Features
 
 - **A modern R console** in VS Code's terminal: syntax highlighting, completion that pops up as you type (from the live session, like the editor's) with each suggestion's help beside it, function signatures under the line, multi-line editing (Shift-Enter for a newline), history search, `readline()` prompts and Ctrl-C interrupts.
