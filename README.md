@@ -179,7 +179,7 @@ npm test            # integration tests in a real VS Code (downloaded on first r
 
 Open this folder in VS Code and press **F5** to start a development window with a sample workspace (`test-fixtures/workspace`). The development build looks for `better` on your `PATH`, then in `../betteR/target/debug/better` (`better.exe` on Windows). On Linux without a display, run the tests as `xvfb-run -a npm test`. On macOS, the plot tests need [XQuartz](https://www.xquartz.org) (`brew install --cask xquartz`), because CRAN's R uses it for `svg()`.
 
-Commits follow [Conventional Commits](https://www.conventionalcommits.org). Architecture and design notes are in [docs/design.md](docs/design.md).
+Commits follow [Conventional Commits](https://www.conventionalcommits.org). For branches and releases, see [CONTRIBUTING.md](CONTRIBUTING.md). Architecture and design notes are in [docs/design.md](docs/design.md).
 
 ## License and credits
 
