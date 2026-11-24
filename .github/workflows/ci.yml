@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop, 'release/**', 'hotfix/**']
   pull_request:
   workflow_dispatch:
 
@@ -25,9 +25,29 @@ jobs:
         with:
           path: vs_code_betteR
 
+      # Build the console from the branch with the same name (feature/x,
+      # develop, release/0.3.0), else the pull request's base branch, else main.
+      - name: Pick the console branch
+        id: console
+        shell: bash
+        env:
+          CANDIDATES: ${{ github.head_ref || github.ref_name }} ${{ github.base_ref }} main
+        run: |
+          set -f
+          for b in $CANDIDATES; do
+            if git ls-remote --exit-code --heads https://github.com/WahiduzzamanKhan/betteR.git "refs/heads/$b" > /dev/null; then
+              echo "Building the console from branch $b"
+              echo "ref=$b" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "::error::No matching betteR branch among: $CANDIDATES"
+          exit 1
+
       - uses: actions/checkout@v7
         with:
           repository: WahiduzzamanKhan/betteR
+          ref: ${{ steps.console.outputs.ref }}
           path: betteR
 
       - uses: r-lib/actions/setup-r@v2
