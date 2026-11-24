@@ -16,7 +16,7 @@ It works in standard VS Code and needs nothing installed into your R library: no
 - **Real debugging:** `browser()`, `debug()` and gutter breakpoints stop in VS Code's debugger on the actual line of your file, with the variables pane, call stack and step buttons. You can also step by typing `n` or `c` in the console.
 - **Plots without httpgd:** an *R Plots* panel shows every plot sharp at its exact size, re-rendered when you resize the panel. It has history, Save as PNG/SVG, Remove and Clear.
 - **Interactive charts and apps:** plotly, leaflet and other htmlwidgets run live in the plots panel; DT tables, other widgets and Shiny apps run in an *R Viewer* panel.
-- **Help pages:** `?mean`, `help()` and `??search` open in an *R Help* panel with Back/Forward. **F1** on a function in your script shows its help.
+- **Help pages:** `?mean`, `help()` and `??search` open in an *R Help* panel with Back/Forward, find in page, copy and paste. **F1** on a function in your script shows its help.
 - **Environment explorer:** an *R Session* side bar on the right lists the objects in your session (or in the debug frame while paused), expandable into columns, list elements and slots. It also shows the attached packages, loaded namespaces and session info, all updated after every command.
 - **Data explorer:** `View(df)` opens a data frame in an editor tab: a fast grid for tables of any size, with sorting, filters, search across all cells and copying to the clipboard. It stays in sync as the data frame changes.
 
@@ -112,7 +112,7 @@ Step with the debug toolbar (**F10** step over, **F11** step into, **F5** contin
 
 ### Help
 
-Type `?mean`, `help("lm")`, `??regression` or `help(package = "stats")` in the console, or press **F1** on a function name in a script. Help opens in the *R Help* panel, in your VS Code theme's colors and fonts; links work, and **◀ ▶** go back and forward.
+Type `?mean`, `help("lm")`, `??regression` or `help(package = "stats")` in the console, or press **F1** on a function name in a script. Help opens in the *R Help* panel, in your VS Code theme's colors and fonts; links work, and **◀ ▶** go back and forward. Select text and copy it with **Cmd+C** (**Ctrl+C**) or the right-click menu (which also has *Copy Link Address* on links), paste into the search page's fields with **Cmd+V** (**Ctrl+V**), and press **Cmd+F** (**Ctrl+F**) or click **Find** to search the page (**Enter** / **Shift+Enter** for the next and previous match, **Escape** to close).
 
 ### Environment explorer
 
