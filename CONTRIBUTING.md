@@ -13,6 +13,7 @@
 - Every feature or issue gets its own branch from `develop`, for example `feature/plot-zoom` or `fix/help-panel-links`. Open a pull request against `develop`. Pull requests target `main` by default, so change the base branch.
 - `main` only holds released code. The README on `main` describes the version people install.
 - Commits follow [Conventional Commits](https://www.conventionalcommits.org). A squash merge's commit message is the pull request title, so write the title in that format too.
+- CI runs on every pull request and on pushes to `main`, `develop`, `release/**` and `hotfix/**`. The extension's CI builds the console from the betteR branch with the same name, else from the pull request's base branch, else from `main`. A change that needs both repos uses the same branch name in each, and the console's pull request is merged first.
 
 ```mermaid
 gitGraph
