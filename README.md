@@ -118,7 +118,7 @@ Type `?mean`, `help("lm")`, `??regression` or `help(package = "stats")` in the c
 
 The **R Session** container in the secondary side bar (on the right, next to Chat) has four views. If it's hidden, use *View › Appearance › Secondary Side Bar*.
 
-- **Environment:** the objects in the global environment, with their type and a preview. Expand data frames, lists, environments and S4/R6 objects to see what's inside. While R is paused in the debugger it shows the current frame instead, marked *Debug frame*. Hover an object for its type and size. Title-bar buttons show or hide hidden (`.name`) objects, clear the environment and refresh.
+- **Environment:** the objects in the global environment, with their type and a preview. Expand data frames, lists, environments and S4/R6 objects to see what's inside. While R is paused in the debugger it shows the current frame instead, marked *Debug frame*. Hover an object for its type and size. Title-bar buttons filter the list by name, show or hide hidden (`.name`) objects, clear the environment and refresh. The filter (🔍, or Cmd+Alt+F / Ctrl+Alt+F in the view) narrows the list as you type: a plain word matches anywhere in the name, and `*` / `?` wildcards match the whole name (`df_*`), ignoring case. The view's title shows the active filter, it applies to objects created later too, and the ✕ button clears it.
 - **Attached:** the search path (`search()`), with package versions. Expand an entry to list its objects.
 - **Loaded Namespaces:** every loaded namespace and its version; attached ones are marked.
 - **Session:** R version, platform, working directory, memory used by the R process, and counts.

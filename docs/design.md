@@ -86,6 +86,7 @@ These tests use a hand-built page laid out like an htmlwidget, so no R packages 
 2. While R is paused at `browser()`, *Environment* shows the frame's local variables; after `Q` it's back to the global env.
 3. *Attached* lists `library()`-attached packages with versions and expands `package:stats` to its objects. *Loaded Namespaces* marks `base` as attached with its version, and *Session* shows the R version.
 4. A hidden `.name` object shows only with *Show Hidden Objects*, expands into its elements, and *Remove* deletes it.
+5. *Filter Objects by Name* with `flt_` (any case) leaves only the `flt_*` objects, still expandable; a new `flt_` object appears and other new objects don't; *Clear Filter* shows everything again.
 
 **Data explorer:**
 1. `View(df)` opens an editor tab named after the data frame, and the webview's grid fetches and draws its first cells.

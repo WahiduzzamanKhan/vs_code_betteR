@@ -106,6 +106,8 @@ export function activate(context: vscode.ExtensionContext): BetteRApi {
         }),
         vscode.commands.registerCommand('betteR.env.refresh', () => explorer.refresh()),
         vscode.commands.registerCommand('betteR.env.clear', () => explorer.clear()),
+        vscode.commands.registerCommand('betteR.env.filter', () => explorer.promptFilter()),
+        vscode.commands.registerCommand('betteR.env.clearFilter', () => explorer.setFilter('')),
         vscode.commands.registerCommand('betteR.env.showHidden', () => explorer.setShowHidden(true)),
         vscode.commands.registerCommand('betteR.env.hideHidden', () => explorer.setShowHidden(false)),
         vscode.commands.registerCommand('betteR.env.remove', (node: EnvNode) => node && explorer.remove([node])),

@@ -2,6 +2,7 @@ import * as assert from 'assert';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import type { BetteRApi } from '../../extension';
+import { matchesFilter } from '../../environment';
 import type { EnvironmentExplorer, EnvNode } from '../../environment';
 import type { Session } from '../../session';
 
@@ -66,6 +67,36 @@ suite('betteR environment explorer: the live session in the side bar', () => {
         }
         await waitFor('back to the global env', () => varNamed(envRoots(), 'env_f'), (n) => !!n);
         assert.ok(!explorer.browsing);
+    });
+
+    test('the filter keeps objects whose names match, by substring or wildcard, ignoring case', async () => {
+        assert.ok(matchesFilter('my_Data', 'data'));
+        assert.ok(!matchesFilter('my_data', 'model'));
+        assert.ok(matchesFilter('df_sales', 'DF_*'));
+        assert.ok(!matchesFilter('my_df_sales', 'df_*'));
+        assert.ok(matchesFilter('x1', 'x?'));
+        assert.ok(matchesFilter('a.b', 'a.b') && !matchesFilter('axb', 'a.b'), 'regex characters are literal');
+        assert.ok(matchesFilter('anything', '  '));
+
+        session.execute('flt_alpha <- 1; flt_beta <- list(x = 1); other_obj <- 2');
+        await waitFor('objects listed', () => envRoots(), (n) => !!varNamed(n, 'flt_beta') && !!varNamed(n, 'other_obj'));
+        try {
+            explorer.setFilter('FLT_');
+            const names = envRoots().flatMap((n) => (n.type === 'var' ? [n.variable.display_name] : []));
+            assert.deepStrictEqual(names.sort(), ['flt_alpha', 'flt_beta']);
+            // Matching objects still expand in full.
+            const beta = varNamed(envRoots(), 'flt_beta')!;
+            assert.strictEqual(((await explorer.environment.getChildren(beta)) as EnvNode[]).length, 1);
+            // New objects are filtered as they arrive.
+            session.execute('flt_gamma <- 3; other_new <- 4');
+            await waitFor('flt_gamma listed', () => varNamed(envRoots(), 'flt_gamma'), (n) => !!n);
+            assert.ok(!varNamed(envRoots(), 'other_new'));
+        } finally {
+            await vscode.commands.executeCommand('betteR.env.clearFilter');
+        }
+        assert.strictEqual(explorer.filter, '');
+        assert.ok(varNamed(envRoots(), 'other_new'));
+        session.execute('rm(flt_alpha, flt_beta, flt_gamma, other_obj, other_new)');
     });
 
     test('search path, loaded namespaces and session info come from the live session', async () => {
