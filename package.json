@@ -70,6 +70,18 @@
         "icon": "$(clear-all)"
       },
       {
+        "command": "betteR.env.filter",
+        "title": "Filter Objects by Name",
+        "category": "betteR",
+        "icon": "$(search)"
+      },
+      {
+        "command": "betteR.env.clearFilter",
+        "title": "Clear Filter",
+        "category": "betteR",
+        "icon": "$(search-stop)"
+      },
+      {
         "command": "betteR.env.showHidden",
         "title": "Show Hidden Objects",
         "category": "betteR",
@@ -129,6 +141,12 @@
           "text": "\u001b\r"
         },
         "when": "terminalFocus && betteR.consoleShiftEnter && !config.terminal.integrated.enableKittyKeyboardProtocol"
+      },
+      {
+        "command": "betteR.env.filter",
+        "key": "ctrl+alt+f",
+        "mac": "cmd+alt+f",
+        "when": "focusedView == betteR.environment"
       }
     ],
     "configuration": {
@@ -229,28 +247,42 @@
         {
           "command": "betteR.env.viewData",
           "when": "false"
+        },
+        {
+          "command": "betteR.env.clearFilter",
+          "when": "betteR.envFiltered"
         }
       ],
       "view/title": [
         {
+          "command": "betteR.env.filter",
+          "when": "view == betteR.environment",
+          "group": "navigation@0"
+        },
+        {
+          "command": "betteR.env.clearFilter",
+          "when": "view == betteR.environment && betteR.envFiltered",
+          "group": "navigation@1"
+        },
+        {
           "command": "betteR.env.showHidden",
           "when": "view == betteR.environment && !betteR.showHidden",
-          "group": "navigation@1"
+          "group": "navigation@2"
         },
         {
           "command": "betteR.env.hideHidden",
           "when": "view == betteR.environment && betteR.showHidden",
-          "group": "navigation@1"
+          "group": "navigation@2"
         },
         {
           "command": "betteR.env.clear",
           "when": "view == betteR.environment",
-          "group": "navigation@2"
+          "group": "navigation@3"
         },
         {
           "command": "betteR.env.refresh",
           "when": "view =~ /^betteR\\./",
-          "group": "navigation@3"
+          "group": "navigation@4"
         }
       ],
       "view/item/context": [

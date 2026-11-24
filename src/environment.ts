@@ -2,6 +2,23 @@ import * as cp from 'child_process';
 import * as vscode from 'vscode';
 import type { Session } from './session';
 
+/**
+ * Whether an object named `name` matches the Environment view's filter:
+ * case-insensitive, by substring, or by `*` / `?` wildcards when it has any.
+ */
+export function matchesFilter(name: string, filter: string): boolean {
+    const f = filter.trim().toLowerCase();
+    if (!f) {
+        return true;
+    }
+    const n = name.toLowerCase();
+    if (!/[*?]/.test(f)) {
+        return n.includes(f);
+    }
+    const pattern = f.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.');
+    return new RegExp(`^${pattern}$`).test(n);
+}
+
 /** A variable as ark's variables comm describes it. */
 export interface RVariable {
     access_key: string;
@@ -199,6 +216,8 @@ export class EnvironmentExplorer implements vscode.Disposable {
     state: SessionState | undefined;
     memory: number | undefined;
     showHidden = false;
+    /** Shows only top-level objects whose names match; see `matchesFilter`. */
+    filter = '';
     /** R is at a browser prompt, so ark reports the debug frame's objects. */
     browsing = false;
     private session: Session | undefined;
@@ -259,6 +278,7 @@ export class EnvironmentExplorer implements vscode.Disposable {
         }
         this.disposables.push(this.environment, this.searchPath, this.namespaces, this.info);
         void vscode.commands.executeCommand('setContext', 'betteR.showHidden', false);
+        void vscode.commands.executeCommand('setContext', 'betteR.envFiltered', false);
         this.updateMessages();
     }
 
@@ -401,7 +421,39 @@ export class EnvironmentExplorer implements vscode.Disposable {
         await this.refreshState();
     }
 
-    /** Removes objects from the environment shown (the debug frame while paused). */
+    setFilter(filter: string): void {
+        this.filter = filter.trim();
+        void vscode.commands.executeCommand('setContext', 'betteR.envFiltered', !!this.filter);
+        this.updateMessages();
+        this.environment.refresh();
+    }
+
+    /**
+     * Asks for a filter, applying it as it's typed. Escape restores the one
+     * there was before; an empty filter shows everything.
+     */
+    async promptFilter(): Promise<void> {
+        const previous = this.filter;
+        const input = vscode.window.createInputBox();
+        input.title = 'Filter R Environment';
+        input.placeholder = 'Object name, or a pattern such as df_* (case-insensitive)';
+        input.value = previous;
+        let accepted = false;
+        await new Promise<void>((resolve) => {
+            input.onDidChangeValue((v) => this.setFilter(v));
+            input.onDidAccept(() => {
+                accepted = true;
+                input.hide();
+            });
+            input.onDidHide(() => resolve());
+            input.show();
+        });
+        input.dispose();
+        if (!accepted) {
+            this.setFilter(previous);
+        }
+    }
+
     /** Opens a data frame (or other table) in the data explorer. */
     async view(node: EnvNode): Promise<void> {
         if (node.type !== 'var' || !this.session) {
@@ -446,6 +498,10 @@ export class EnvironmentExplorer implements vscode.Disposable {
     }
 
     private environmentRoots(): EnvNode[] {
+        return this.allEnvironmentRoots().filter((n) => n.type !== 'var' || matchesFilter(n.variable.display_name, this.filter));
+    }
+
+    private allEnvironmentRoots(): EnvNode[] {
         const visible: EnvNode[] = (this.variables ?? []).map((variable) => ({
             type: 'var',
             variable,
@@ -602,8 +658,17 @@ export class EnvironmentExplorer implements vscode.Disposable {
     private updateMessages(): void {
         const [env, search, ns, info] = this.views;
         const waiting = this.session ? 'Waiting for the R console…' : 'The R session is not running.';
-        env.message = this.variables === undefined ? waiting : this.variables.length || this.hidden.length ? undefined : 'The environment is empty.';
-        env.description = this.variables === undefined ? undefined : this.browsing ? 'Debug frame' : 'Global';
+        const any = !!this.variables?.length || (this.showHidden && !this.browsing && this.hidden.length > 0);
+        env.message =
+            this.variables === undefined
+                ? waiting
+                : !any
+                  ? 'The environment is empty.'
+                  : this.filter && !this.environmentRoots().length
+                    ? `No objects match '${this.filter}'.`
+                    : undefined;
+        const where = this.variables === undefined ? undefined : this.browsing ? 'Debug frame' : 'Global';
+        env.description = this.filter ? `${where ? `${where} · ` : ''}filter: ${this.filter}` : where;
         for (const view of [search, ns, info]) {
             view.message = this.state ? undefined : waiting;
         }
