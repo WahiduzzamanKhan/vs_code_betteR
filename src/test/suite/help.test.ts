@@ -50,6 +50,16 @@ suite('betteR help: R documentation in an R Help panel', () => {
         assert.match(head, /classList\.add\("betteR-themed"\)/);
     });
 
+    test('help pages carry find, copy, paste and a context menu', async () => {
+        // The page is a cross-origin iframe, out of reach of VS Code's own find and copy.
+        const html = await (await fetch(session.help.current!)).text();
+        assert.match(html, /"betteR-find"/, 'page answers the find bar');
+        assert.match(html, /"betteR-copy"/, 'page sends its selection to copy');
+        assert.match(html, /::highlight\(betteR-find\)/, 'matches are highlighted');
+        assert.match(html, /"betteR-paste"/, 'page asks the panel for the clipboard');
+        assert.match(html, /addEventListener\("contextmenu"/, 'page has its own context menu');
+    });
+
     test('Back and Forward move through help history', async () => {
         session.execute('help("lm")');
         await waitFor('lm page', () => session.help.title, (t) => /Fitting Linear Models/.test(t));
