@@ -28,8 +28,17 @@ async function consoleText(session: Session): Promise<string> {
     return vscode.env.clipboard.readText();
 }
 
-// Unix only: on Windows the console reads Shift-Enter through the console API.
-(process.platform === 'win32' ? suite.skip : suite)('betteR console: Shift-Enter inserts a newline', () => {
+type Keybinding = { command: string; key: string; args?: { text: string }; when: string };
+
+/** The extension's binding of `key` that sends `text` to the console. */
+function binding(key: string, text: string): Keybinding {
+    const all = vscode.extensions.getExtension('better.better-vscode')!.packageJSON.contributes.keybindings as Keybinding[];
+    return all.find((b) => b.key === key && b.args?.text === text)!;
+}
+
+// The extension binds the newline key itself (betteR.console.editing.newline,
+// Shift+Enter by default) to ESC CR, and the other newline key to Enter.
+suite('betteR console: the newline key', () => {
     let session: Session;
 
     suiteSetup(async () => {
@@ -40,28 +49,30 @@ async function consoleText(session: Session): Promise<string> {
         session.openConsole();
     });
 
-    test('the console offers Shift-Enter, as VS Code reports it (kitty keyboard protocol)', async () => {
-        const kitty = vscode.workspace.getConfiguration('terminal.integrated').get<boolean>('enableKittyKeyboardProtocol');
-        assert.strictEqual(kitty, true, 'this VS Code should enable the kitty keyboard protocol by default');
-        // The extension only tells the console about Shift-Enter when VS Code
-        // can't report it, so this banner comes from the terminal's own answer.
+    test('the console banner offers Shift+Enter', async () => {
         const text = await waitFor('the console banner', () => consoleText(session), (t) => t.includes('Ctrl-D quits'));
-        assert.match(text, /Shift-Enter newline/);
+        assert.match(text, /Shift[-+]Enter/);
     });
 
-    test("the Shift-Enter keybinding's sequence (for terminals that can't report it) inserts a newline", async () => {
-        const binding = (vscode.extensions.getExtension('better.better-vscode')!.packageJSON.contributes.keybindings as {
-            command: string;
-            key: string;
-            args?: unknown;
-        }[]).find((b) => b.key === 'shift+enter')!;
+    test("Shift+Enter's binding inserts a newline", async () => {
+        const b = binding('shift+enter', '\u001b\r');
+        assert.ok(b, 'no Shift+Enter newline binding');
         session.terminal!.show(false);
         session.terminal!.sendText('40000 + 1', false);
-        await vscode.commands.executeCommand(binding.command, binding.args);
+        await vscode.commands.executeCommand(b.command, b.args);
         await new Promise((r) => setTimeout(r, 1500));
         assert.doesNotMatch(await consoleText(session), /\[1\] 40001/, 'the line ran instead of continuing');
         session.terminal!.sendText('50000 + 2\r', false);
         const text = await waitFor('both lines to run', () => consoleText(session), (t) => t.includes('[1] 50002'));
         assert.match(text, /\[1\] 40001[\s\S]*\[1\] 50002/);
+    });
+
+    test("Alt+Enter's binding (when Shift+Enter is the newline key) runs the line", async () => {
+        const b = binding('alt+enter', '\r');
+        assert.ok(b, 'no Alt+Enter binding that runs the line');
+        session.terminal!.show(false);
+        session.terminal!.sendText('60000 + 3', false);
+        await vscode.commands.executeCommand(b.command, b.args);
+        await waitFor('the line to run', () => consoleText(session), (t) => t.includes('[1] 60003'));
     });
 });

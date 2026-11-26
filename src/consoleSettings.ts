@@ -17,8 +17,8 @@ export const CONSOLE_SETTING_KEYS = [
     'completion.min_chars',
     'completion.delay_ms',
     'completion.accept',
-    'completion.max_height',
-    'editing.shift_enter',
+    'completion.max_suggestions',
+    'editing.newline',
     'history.size',
     'history.suggestions',
 ] as const;
@@ -65,18 +65,9 @@ function setArgs(values: ConsoleSettingValues, keys: readonly ConsoleSettingKey[
     return args;
 }
 
-/**
- * Arguments for the console terminal: every setting the user set, in a fixed
- * order. `shiftEnterOn` (VS Code's terminal can't report Shift-Enter, so the
- * extension's keybinding sends Alt-Enter's sequence) adds
- * `editing.shift_enter=on`, unless the user set `editing.shift_enter`.
- */
-export function consoleArgs(values: ConsoleSettingValues, shiftEnterOn: boolean): string[] {
-    const v = { ...values };
-    if (shiftEnterOn && assignment('editing.shift_enter', v['editing.shift_enter']) === undefined) {
-        v['editing.shift_enter'] = 'on';
-    }
-    return setArgs(v, CONSOLE_SETTING_KEYS);
+/** Arguments for the console terminal: every setting the user set, in a fixed order. */
+export function consoleArgs(values: ConsoleSettingValues): string[] {
+    return setArgs(values, CONSOLE_SETTING_KEYS);
 }
 
 /**

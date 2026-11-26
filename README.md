@@ -10,7 +10,7 @@ It works in standard VS Code and needs nothing installed into your R library: no
 
 ## Features
 
-- **A modern R console** in VS Code's terminal: syntax highlighting, completion that pops up as you type (from the live session, like the editor's) with each suggestion's help beside it, function signatures under the line, multi-line editing (Shift-Enter for a newline), history search, `readline()` prompts and Ctrl-C interrupts.
+- **A modern R console** in VS Code's terminal: syntax highlighting, completion that pops up as you type (from the live session, like the editor's) with each suggestion's help beside it, function signatures under the line, multi-line editing (Shift+Enter for a newline, or the key you choose), history search, `readline()` prompts and Ctrl-C interrupts.
 - **Live-session editor intelligence:** completion (including data frame columns and functions you've defined), signature help and hover help, from the same session as the console.
 - **Run code RStudio-style:** **Cmd+Enter** (Ctrl+Enter on Linux and Windows) runs the whole statement at the cursor (a function definition, a pipe chain) or the selection, then moves to the next statement.
 - **Real debugging:** `browser()`, `debug()` and gutter breakpoints stop in VS Code's debugger on the actual line of your file, with the variables pane, call stack and step buttons. You can also step by typing `n` or `c` in the console.
@@ -176,15 +176,17 @@ The `betteR.console.*` settings change how the R console behaves. They are the c
 | `betteR.console.startup.inline_plots` | `auto`, `iterm`, `kitty`, `sixel`, `none` | `auto` | How plots are drawn in the terminal. `auto` detects the terminal. |
 | `betteR.console.completion.lsp` | `true`, `false` | `true` | Completions from ark's language server. |
 | `betteR.console.completion.popup` | `typing`, `tab` | `typing` | Show suggestions as you type, or only when Tab is pressed. |
-| `betteR.console.completion.min_chars` | 0–10 | `1` | Only with `popup` = `typing`: name characters typed before suggestions show. After `$`, `@` or `::` they always show. |
+| `betteR.console.completion.min_chars` | 0–10 | `3` | Only with `popup` = `typing`: name characters typed before suggestions show. After `$`, `@` or `::` they always show. |
 | `betteR.console.completion.delay_ms` | 0–2000 | `0` | Only with `popup` = `typing`: how long typing must pause before suggestions show. Each key press restarts the wait. |
 | `betteR.console.completion.accept` | `tab`, `enter` | `tab` | Key that takes the highlighted suggestion. With `enter`, Enter takes it when the menu is open and runs the line when it isn't; Tab still opens the menu and moves to the next item. |
-| `betteR.console.completion.max_height` | 1–50 | `5` | Rows in the completion menu. |
-| `betteR.console.editing.shift_enter` | `auto`, `on`, `off` | `auto` | Whether Shift+Enter inserts a newline. Alt+Enter always does. |
+| `betteR.console.completion.max_suggestions` | 1–50 | `5` | Most suggestions shown at once in the completion menu (the border isn't counted). With more matches, the menu scrolls. |
+| `betteR.console.editing.newline` | `auto`, `shift_enter`, `alt_enter`, `opt_enter` | `auto` | The one key that inserts a newline; the others run the line like Enter. `auto` is Shift+Enter in VS Code. `opt_enter` is Option+Enter on macOS and the same as `alt_enter` on Windows and Linux. |
 | `betteR.console.history.size` | 0 or more | `10000` | Lines kept in the history file. `0` keeps no history. |
 | `betteR.console.history.suggestions` | `true`, `false` | `true` | The rest of a matching history line in grey after the cursor; Right arrow takes it. |
 
 The console's `startup.ark` setting has no VS Code setting: in VS Code, `betteR.arkPath` decides which kernel runs.
+
+VS Code's terminal can't always pass Shift+Enter or Option+Enter through to the console as keys of their own, so the extension binds the newline key itself: the key `betteR.console.editing.newline` picks inserts a newline, and the other one (Shift+Enter or Alt/Option+Enter) runs the line like Enter. This works whatever `terminal.integrated.macOptionIsMeta` and the kitty keyboard protocol are set to, and a new choice takes effect at once. The keybindings read only the VS Code setting, so if you choose the key in `config.toml` instead, VS Code still uses Shift+Enter.
 
 ## Troubleshooting
 

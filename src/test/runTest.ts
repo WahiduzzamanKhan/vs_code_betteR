@@ -39,6 +39,24 @@ function rTempDirs(): Set<string> {
     return new Set(fs.readdirSync(os.tmpdir()).filter((name) => name.startsWith('Rtmp')));
 }
 
+/** Where the console keeps its config.toml for this user (see the betteR README). */
+function userConfigFile(): string {
+    if (process.platform === 'win32') {
+        return path.join(process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming'), 'better', 'config.toml');
+    }
+    return path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'better', 'config.toml');
+}
+
+/** Size and modification time, or `missing`. */
+function fileState(file: string): string {
+    try {
+        const st = fs.statSync(file);
+        return `${st.size} ${st.mtimeMs}`;
+    } catch {
+        return 'missing';
+    }
+}
+
 async function main(): Promise<void> {
     const repo = path.resolve(__dirname, '../../');
     // BETTER_TEST_EXTENSION: run the tests against another copy of the
@@ -59,15 +77,35 @@ async function main(): Promise<void> {
     const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'better-ws-'));
     fs.cpSync(path.join(repo, 'test-fixtures/workspace'), workspace, { recursive: true });
 
+    // The console writes its config.toml on first start: keep it, and any
+    // settings in it, away from the developer's own (and read none of theirs).
+    const configHome = fs.mkdtempSync(path.join(os.tmpdir(), 'better-config-'));
+    const realConfig = userConfigFile();
+    const realBefore = fileState(realConfig);
+
     try {
         await runTests({
             extensionDevelopmentPath,
             extensionTestsPath,
             // Other R extensions (e.g. REditorSupport) would register competing language servers.
             launchArgs: [workspace, '--disable-extensions', '--disable-workspace-trust'],
+            // Passed to VS Code itself, so the terminals and the kernel get them too.
+            extensionTestsEnv: {
+                BETTER_CONFIG: path.join(configHome, 'better', 'config.toml'),
+                XDG_CONFIG_HOME: configHome,
+            },
         });
+        // The console wrote its template there, so it read that file, not the user's.
+        if (!fs.existsSync(path.join(configHome, 'better', 'config.toml'))) {
+            throw new Error(`The console didn't use the test config in ${configHome}`);
+        }
     } finally {
         fs.rmSync(workspace, { recursive: true, force: true });
+        fs.rmSync(configHome, { recursive: true, force: true });
+    }
+
+    if (fileState(realConfig) !== realBefore) {
+        throw new Error(`The tests changed the user's console config ${realConfig}`);
     }
 
     // Closing VS Code must not leave an R session behind.

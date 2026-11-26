@@ -59,35 +59,23 @@ function resolveBinary(setting: string, envVar: string | undefined, name: string
     return found;
 }
 
-/**
- * Where VS Code's terminal can't report Shift-Enter apart from Enter (the
- * kitty keyboard protocol is off: `terminal.integrated.enableKittyKeyboardProtocol`,
- * which VS Code before 1.110 lacks or defaults off), the console's Shift-Enter
- * keybinding (package.json) sends Alt-Enter's sequence instead; the console is
- * then told `editing.shift_enter=on` so its banner offers Shift-Enter. Windows
- * reports Shift-Enter through the console API regardless.
- */
-function shiftEnterSentByKeybinding(): boolean {
-    const kitty = vscode.workspace.getConfiguration('terminal.integrated').get<boolean>('enableKittyKeyboardProtocol');
-    return process.platform !== 'win32' && !kitty;
-}
-
 /** The console terminals of every session, including restarted ones. */
 const consoleTerminals = new WeakSet<vscode.Terminal>();
 
 /**
- * Keeps the `betteR.consoleShiftEnter` context key, which scopes the console's
- * Shift-Enter keybinding (package.json) to its terminal, up to date. It also
- * leaves out consoles on Windows, which read Shift-Enter through the console
- * API. That depends on where the console runs (the extension host), not on the
- * UI's OS that `isWindows` reports, which differ in remote windows.
+ * Keeps the `betteR.consoleFocused` context key, which scopes the console's
+ * newline keybindings (package.json) to its terminal, up to date. VS Code's
+ * terminal can't always pass Shift+Enter or Option+Enter through as keys of
+ * their own, so the extension binds the key `betteR.console.editing.newline`
+ * picks to the Alt+Enter sequence (ESC CR), which the console started with
+ * `--ide` takes as a newline, and the other newline keys to Enter.
  */
 export function trackConsoleFocus(): vscode.Disposable {
     const update = (t: vscode.Terminal | undefined) =>
         void vscode.commands.executeCommand(
             'setContext',
-            'betteR.consoleShiftEnter',
-            process.platform !== 'win32' && t !== undefined && consoleTerminals.has(t),
+            'betteR.consoleFocused',
+            t !== undefined && consoleTerminals.has(t),
         );
     update(vscode.window.activeTerminal);
     return vscode.window.onDidChangeActiveTerminal(update);
@@ -690,7 +678,7 @@ export class Session implements vscode.Disposable {
                     '--ide',
                     String(this.ide.port),
                     // Read now, so a console reopened after a settings change gets them.
-                    ...consoleArgs(userConsoleSettings(), shiftEnterSentByKeybinding()),
+                    ...consoleArgs(userConsoleSettings()),
                 ],
                 // In the environment, not argv: other users can see process arguments.
                 env: { BETTER_IDE_TOKEN: this.ide.token },

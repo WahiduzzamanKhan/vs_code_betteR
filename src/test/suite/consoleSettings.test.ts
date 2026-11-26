@@ -46,7 +46,7 @@ function kernelSets(session: Session): string[] {
     return args.flatMap((a, i) => (args[i - 1] === '--set' ? [a] : []));
 }
 
-const KEYS = ['startup.banner', 'completion.max_height', 'startup.r_home'];
+const KEYS = ['startup.banner', 'completion.max_suggestions', 'editing.newline', 'startup.r_home'];
 
 // Restarts R, so it runs just before the shutdown suite (see index.ts).
 suite('betteR: console settings from VS Code', () => {
@@ -97,26 +97,29 @@ suite('betteR: console settings from VS Code', () => {
         }
         prompts.length = 0;
         await config().update('startup.banner', false, vscode.ConfigurationTarget.Workspace);
-        await config().update('completion.max_height', 7, vscode.ConfigurationTarget.Workspace);
+        await config().update('completion.max_suggestions', 7, vscode.ConfigurationTarget.Workspace);
+        await config().update('editing.newline', 'alt_enter', vscode.ConfigurationTarget.Workspace);
         await new Promise((r) => setTimeout(r, 500));
         assert.deepStrictEqual(prompts, [], 'no console was running, so nothing to restart');
 
         const terminal = session.openConsole();
         const sets = terminalSets(session);
         assert.ok(sets.includes('startup.banner=false'), JSON.stringify(sets));
-        assert.ok(sets.includes('completion.max_height=7'), JSON.stringify(sets));
-        // Unset keys fall through to config.toml. editing.shift_enter=on is
-        // the extension's own, where the kitty keyboard protocol is off.
-        assert.deepStrictEqual(
-            sets.filter((s) => s !== 'editing.shift_enter=on'),
-            ['startup.banner=false', 'completion.max_height=7'],
-        );
+        // Unset keys fall through to config.toml.
+        assert.deepStrictEqual(sets, ['startup.banner=false', 'completion.max_suggestions=7', 'editing.newline=alt_enter']);
         assert.deepStrictEqual(kernelSets(session), [], 'the kernel started before any setting was set');
 
         // The console accepts them: it runs code, without its banner.
         terminal.sendText('6 * 7', true);
         const text = await waitFor('the console to run code', () => consoleText(session, terminal), (t) => t.includes('[1] 42'));
         assert.doesNotMatch(text, /Ctrl-D quits/, 'startup.banner = false still showed the banner');
+        // With editing.newline = alt_enter, the extension's ESC CR still inserts a newline (--ide mode).
+        terminal.sendText('70000 + 4', false);
+        await vscode.commands.executeCommand('workbench.action.terminal.sendSequence', { text: '\u001b\r' });
+        await new Promise((r) => setTimeout(r, 1500));
+        assert.doesNotMatch(await consoleText(session, terminal), /\[1\] 70004/, 'ESC CR ran the line');
+        terminal.sendText('80000 + 5\r', false);
+        await waitFor('both lines to run', () => consoleText(session, terminal), (t) => /\[1\] 70004[\s\S]*\[1\] 80005/.test(t));
         assert.strictEqual(await session.evaluate<number>('1 + 1'), 2);
     });
 

@@ -9,7 +9,7 @@ const properties: Record<string, { type: string; default: unknown; enum?: string
 
 suite('Console settings: arguments', () => {
     test('nothing set: no arguments for the console or the kernel', () => {
-        assert.deepStrictEqual(consoleArgs({}, false), []);
+        assert.deepStrictEqual(consoleArgs({}), []);
         assert.deepStrictEqual(kernelArgs({}, false), []);
     });
 
@@ -24,7 +24,6 @@ suite('Console settings: arguments', () => {
                     'completion.delay_ms': 300,
                     'startup.r_home': '/opt/R 4.5/lib/R',
                 },
-                false,
             ),
             [
                 '--set', 'startup.r_home=/opt/R 4.5/lib/R',
@@ -47,13 +46,13 @@ suite('Console settings: arguments', () => {
             'completion.min_chars': 0,
             'completion.delay_ms': 2000,
             'completion.accept': 'tab',
-            'completion.max_height': 50,
-            'editing.shift_enter': 'off',
+            'completion.max_suggestions': 50,
+            'editing.newline': 'opt_enter',
             'history.size': 10000,
             'history.suggestions': false,
         } as const;
         assert.deepStrictEqual(Object.keys(values), [...CONSOLE_SETTING_KEYS]);
-        const args = consoleArgs(values, false);
+        const args = consoleArgs(values);
         assert.deepStrictEqual(
             args.filter((_, i) => i % 2 === 1),
             Object.entries(values).map(([k, v]) => `${k}=${v}`),
@@ -62,9 +61,9 @@ suite('Console settings: arguments', () => {
     });
 
     test('a value equal to the default is still passed when the user set it (it overrides config.toml)', () => {
-        assert.deepStrictEqual(consoleArgs({ 'completion.max_height': 5, 'startup.r_home': '' }, false), [
+        assert.deepStrictEqual(consoleArgs({ 'completion.max_suggestions': 5, 'startup.r_home': '' }), [
             '--set', 'startup.r_home=',
-            '--set', 'completion.max_height=5',
+            '--set', 'completion.max_suggestions=5',
         ]);
     });
 
@@ -72,34 +71,25 @@ suite('Console settings: arguments', () => {
         assert.deepStrictEqual(
             consoleArgs(
                 {
-                    'completion.max_height': { rows: 3 },
+                    'completion.max_suggestions': { rows: 3 },
                     'history.size': null,
                     'completion.min_chars': Number.NaN,
                     'completion.delay_ms': [1],
                     'startup.banner': false,
                 },
-                false,
             ),
             ['--set', 'startup.banner=false'],
         );
     });
 
     test('an out-of-range value is passed as is, for the console to warn about', () => {
-        assert.deepStrictEqual(consoleArgs({ 'completion.max_height': 99 }, false), ['--set', 'completion.max_height=99']);
+        assert.deepStrictEqual(consoleArgs({ 'completion.max_suggestions': 99 }), ['--set', 'completion.max_suggestions=99']);
     });
 
-    test("where the extension's keybinding sends Shift-Enter, the console gets editing.shift_enter=on", () => {
-        assert.deepStrictEqual(consoleArgs({}, true), ['--set', 'editing.shift_enter=on']);
-        assert.deepStrictEqual(consoleArgs({ 'history.size': 5 }, true), [
-            '--set', 'editing.shift_enter=on',
-            '--set', 'history.size=5',
-        ]);
-    });
-
-    test("the user's editing.shift_enter wins over the extension's", () => {
-        for (const v of ['auto', 'on', 'off']) {
-            assert.deepStrictEqual(consoleArgs({ 'editing.shift_enter': v }, true), ['--set', `editing.shift_enter=${v}`]);
-            assert.deepStrictEqual(consoleArgs({ 'editing.shift_enter': v }, false), ['--set', `editing.shift_enter=${v}`]);
+    test('editing.newline is passed only when the user set it', () => {
+        assert.deepStrictEqual(consoleArgs({}), []);
+        for (const v of ['auto', 'shift_enter', 'alt_enter', 'opt_enter']) {
+            assert.deepStrictEqual(consoleArgs({ 'editing.newline': v }), ['--set', `editing.newline=${v}`]);
         }
     });
 
@@ -132,11 +122,11 @@ suite('Console settings: package.json', () => {
         'startup.inline_plots': { type: 'string', default: 'auto', enum: ['auto', 'iterm', 'kitty', 'sixel', 'none'] },
         'completion.lsp': { type: 'boolean', default: true },
         'completion.popup': { type: 'string', default: 'typing', enum: ['typing', 'tab'] },
-        'completion.min_chars': { type: 'integer', default: 1, minimum: 0, maximum: 10 },
+        'completion.min_chars': { type: 'integer', default: 3, minimum: 0, maximum: 10 },
         'completion.delay_ms': { type: 'integer', default: 0, minimum: 0, maximum: 2000 },
         'completion.accept': { type: 'string', default: 'tab', enum: ['tab', 'enter'] },
-        'completion.max_height': { type: 'integer', default: 5, minimum: 1, maximum: 50 },
-        'editing.shift_enter': { type: 'string', default: 'auto', enum: ['auto', 'on', 'off'] },
+        'completion.max_suggestions': { type: 'integer', default: 5, minimum: 1, maximum: 50 },
+        'editing.newline': { type: 'string', default: 'auto', enum: ['auto', 'shift_enter', 'alt_enter', 'opt_enter'] },
         'history.size': { type: 'integer', default: 10000, minimum: 0 },
         'history.suggestions': { type: 'boolean', default: true },
     };
@@ -158,5 +148,69 @@ suite('Console settings: package.json', () => {
         const contributed = Object.keys(properties).filter((k) => k.startsWith('betteR.console.'));
         assert.deepStrictEqual(contributed.sort(), Object.keys(spec).map((k) => `betteR.console.${k}`).sort());
         assert.ok(properties['betteR.arkPath'], 'betteR.arkPath decides the kernel in VS Code');
+    });
+});
+
+/**
+ * Evaluates the `when` clauses the newline keybindings use: `&&` of `key`,
+ * `key == value`, `key != value` and `key =~ /regex/`.
+ */
+function when(clause: string, context: Record<string, unknown>): boolean {
+    return clause.split('&&').every((part) => {
+        const term = part.trim();
+        let m = /^(\S+) =~ \/(.*)\/$/.exec(term);
+        if (m) {
+            return new RegExp(m[2]).test(String(context[m[1]] ?? ''));
+        }
+        m = /^(\S+) (==|!=) (\S+)$/.exec(term);
+        if (m) {
+            return (String(context[m[1]]) === m[3]) === (m[2] === '==');
+        }
+        assert.match(term, /^[\w.]+$/, `unexpected when clause: ${term}`);
+        return Boolean(context[term]);
+    });
+}
+
+suite('Console settings: newline keybindings', () => {
+    const NEWLINE = '\u001b\r';
+    const bindings = (pkg.contributes.keybindings as { command: string; key: string; mac?: string; args?: { text: string }; when: string }[])
+        .filter((b) => b.key === 'shift+enter' || b.key === 'alt+enter');
+
+    /** What each key sends to the focused console, by key. */
+    function sent(newline: string | undefined, consoleFocused = true): Record<string, string | undefined> {
+        const context = {
+            terminalFocus: true,
+            'betteR.consoleFocused': consoleFocused,
+            // VS Code's config context keys include the default.
+            'config.betteR.console.editing.newline': newline ?? 'auto',
+        };
+        const result: Record<string, string | undefined> = {};
+        for (const key of ['shift+enter', 'alt+enter']) {
+            const matching = bindings.filter((b) => b.key === key && when(b.when, context));
+            assert.ok(matching.length <= 1, `${key}: ${matching.length} bindings apply`);
+            for (const b of matching) {
+                assert.strictEqual(b.command, 'workbench.action.terminal.sendSequence');
+                assert.strictEqual(b.mac, undefined, 'alt+enter is Option+Enter on macOS');
+            }
+            result[key] = matching[0]?.args?.text;
+        }
+        return result;
+    }
+
+    test('only the chosen key sends the newline (ESC CR); the other runs the line (CR)', () => {
+        const shift = { 'shift+enter': NEWLINE, 'alt+enter': '\r' };
+        const alt = { 'shift+enter': '\r', 'alt+enter': NEWLINE };
+        assert.deepStrictEqual(sent(undefined), shift, 'unset: auto');
+        assert.deepStrictEqual(sent('auto'), shift, 'auto: Shift+Enter in VS Code');
+        assert.deepStrictEqual(sent('shift_enter'), shift);
+        assert.deepStrictEqual(sent('alt_enter'), alt);
+        assert.deepStrictEqual(sent('opt_enter'), alt, 'Option+Enter on macOS, Alt+Enter elsewhere');
+        assert.deepStrictEqual(sent('nonsense'), shift, 'an invalid value acts as auto');
+    });
+
+    test('the keys are left alone outside the console', () => {
+        for (const v of ['auto', 'alt_enter']) {
+            assert.deepStrictEqual(sent(v, false), { 'shift+enter': undefined, 'alt+enter': undefined });
+        }
     });
 });
