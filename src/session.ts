@@ -9,6 +9,7 @@ import { LanguageClient, LanguageClientOptions, ServerOptions } from 'vscode-lan
 import { executableName, existingFile, findInstalled, findOnPath } from './binary';
 import { failureReasonIn } from './arkLog';
 import { ConsoleNeeded, checkConsoleVersion } from './compat';
+import { consoleArgs, kernelArgs as kernelSetArgs, userConsoleSettings } from './consoleSettings';
 import { IdeChannel, IdeMessage } from './ide';
 import { offerInstall } from './install';
 import { DataExplorers } from './dataExplorer';
@@ -62,13 +63,13 @@ function resolveBinary(setting: string, envVar: string | undefined, name: string
  * Where VS Code's terminal can't report Shift-Enter apart from Enter (the
  * kitty keyboard protocol is off: `terminal.integrated.enableKittyKeyboardProtocol`,
  * which VS Code before 1.110 lacks or defaults off), the console's Shift-Enter
- * keybinding (package.json) sends Alt-Enter's sequence instead; tells the
- * console so its banner offers Shift-Enter. Windows reports Shift-Enter
- * through the console API regardless.
+ * keybinding (package.json) sends Alt-Enter's sequence instead; the console is
+ * then told `editing.shift_enter=on` so its banner offers Shift-Enter. Windows
+ * reports Shift-Enter through the console API regardless.
  */
-function shiftEnterEnv(): Record<string, string> {
+function shiftEnterSentByKeybinding(): boolean {
     const kitty = vscode.workspace.getConfiguration('terminal.integrated').get<boolean>('enableKittyKeyboardProtocol');
-    return process.platform !== 'win32' && !kitty ? { BETTER_SHIFT_ENTER: '1' } : {};
+    return process.platform !== 'win32' && !kitty;
 }
 
 /** The console terminals of every session, including restarted ones. */
@@ -301,11 +302,24 @@ export class Session implements vscode.Disposable {
         const htmlServer = await HtmlServer.start();
 
         const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        output.appendLine(`Starting R kernel: ${[kernelCommand, ...kernelArgs].join(' ')}`);
+        // The kernel's half of the `betteR.console.*` settings (startup.r_home).
+        const kernelSettings = kernelSetArgs(userConsoleSettings(), Boolean(arkOverride));
+        output.appendLine(`Starting R kernel: ${[kernelCommand, ...kernelArgs, ...kernelSettings].join(' ')}`);
         output.appendLine(`Connection file: ${connectionFile}`);
         const kernel = cp.spawn(
             kernelCommand,
-            [...kernelArgs, '--connection_file', connectionFile, '--session-mode', 'console', '--log', logFile],
+            // `--set` last: `--kernel` has to come first, and the tests find
+            // kernels by `--kernel --connection_file` (runTest.ts).
+            [
+                ...kernelArgs,
+                '--connection_file',
+                connectionFile,
+                '--session-mode',
+                'console',
+                '--log',
+                logFile,
+                ...kernelSettings,
+            ],
             { cwd: cwd ?? os.homedir(), stdio: 'ignore' },
         );
 
@@ -670,9 +684,16 @@ export class Session implements vscode.Disposable {
             this.terminal = vscode.window.createTerminal({
                 name: CONSOLE_NAME,
                 shellPath: this.consolePath,
-                shellArgs: ['--connection-file', this.connectionFile, '--ide', String(this.ide.port)],
+                shellArgs: [
+                    '--connection-file',
+                    this.connectionFile,
+                    '--ide',
+                    String(this.ide.port),
+                    // Read now, so a console reopened after a settings change gets them.
+                    ...consoleArgs(userConsoleSettings(), shiftEnterSentByKeybinding()),
+                ],
                 // In the environment, not argv: other users can see process arguments.
-                env: { BETTER_IDE_TOKEN: this.ide.token, ...shiftEnterEnv() },
+                env: { BETTER_IDE_TOKEN: this.ide.token },
                 cwd: this.cwd,
                 iconPath: new vscode.ThemeIcon('terminal'),
             });

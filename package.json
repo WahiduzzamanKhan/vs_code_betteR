@@ -166,6 +166,125 @@
           "type": "boolean",
           "default": true,
           "description": "Open the R console in a terminal when the session starts."
+        },
+        "betteR.console.startup.r_home": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "R installation to use (its `R_HOME`). Empty: `$R_HOME`, else `R RHOME`. Used by the R kernel, unless `#betteR.arkPath#` is set. Changes apply when the R session restarts. Left unset, the console's `config.toml` decides.",
+          "order": 10
+        },
+        "betteR.console.startup.banner": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show the R version / ark / key-hint lines when the console starts. Changes apply when the R console restarts. Left unset, the console's `config.toml` decides.",
+          "order": 11
+        },
+        "betteR.console.startup.inline_plots": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "iterm",
+            "kitty",
+            "sixel",
+            "none"
+          ],
+          "default": "auto",
+          "enumDescriptions": [
+            "Detect the terminal.",
+            "iTerm2 inline images.",
+            "Kitty graphics protocol.",
+            "Sixel graphics.",
+            "Don't draw plots in the terminal."
+          ],
+          "markdownDescription": "How plots are drawn in the terminal. `auto` detects the terminal. Changes apply when the R console restarts. Left unset, the console's `config.toml` decides.",
+          "order": 12
+        },
+        "betteR.console.completion.lsp": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Completions from ark's language server. Changes apply when the R console restarts. Left unset, the console's `config.toml` decides.",
+          "order": 13
+        },
+        "betteR.console.completion.popup": {
+          "type": "string",
+          "enum": [
+            "typing",
+            "tab"
+          ],
+          "default": "typing",
+          "enumDescriptions": [
+            "Show suggestions as you type.",
+            "Show suggestions only when Tab is pressed."
+          ],
+          "markdownDescription": "Show completion suggestions as you type, or only when Tab is pressed. Changes apply when the R console restarts. Left unset, the console's `config.toml` decides.",
+          "order": 14
+        },
+        "betteR.console.completion.min_chars": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10,
+          "default": 1,
+          "markdownDescription": "Only with `#betteR.console.completion.popup#` set to `typing`: name characters typed before the cursor before suggestions show. After `$`, `@` or `::`, suggestions always show, whatever this is set to. Ignored with `popup` set to `tab`. Changes apply when the R console restarts. Left unset, the console's `config.toml` decides.",
+          "order": 15
+        },
+        "betteR.console.completion.delay_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2000,
+          "default": 0,
+          "markdownDescription": "Only with `#betteR.console.completion.popup#` set to `typing`: how long typing must pause (milliseconds) before suggestions show. Each key press restarts the wait. Ignored with `popup` set to `tab`. Changes apply when the R console restarts. Left unset, the console's `config.toml` decides.",
+          "order": 16
+        },
+        "betteR.console.completion.accept": {
+          "type": "string",
+          "enum": [
+            "tab",
+            "enter"
+          ],
+          "default": "tab",
+          "enumDescriptions": [
+            "Tab takes the highlighted suggestion.",
+            "Enter takes the highlighted suggestion when the menu is open and runs the line when it isn't; Tab still opens the menu and moves to the next item."
+          ],
+          "markdownDescription": "Key that takes the highlighted completion suggestion. Changes apply when the R console restarts. Left unset, the console's `config.toml` decides.",
+          "order": 17
+        },
+        "betteR.console.completion.max_height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "default": 5,
+          "markdownDescription": "Rows in the completion menu. Changes apply when the R console restarts. Left unset, the console's `config.toml` decides.",
+          "order": 18
+        },
+        "betteR.console.editing.shift_enter": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "on",
+            "off"
+          ],
+          "default": "auto",
+          "enumDescriptions": [
+            "On where the terminal can tell Shift+Enter from Enter (kitty keyboard protocol, Windows, VS Code).",
+            "Shift+Enter inserts a newline.",
+            "Shift+Enter doesn't insert a newline."
+          ],
+          "markdownDescription": "Whether Shift+Enter inserts a newline. Alt+Enter always inserts a newline. Changes apply when the R console restarts. Left unset, the console's `config.toml` decides.",
+          "order": 19
+        },
+        "betteR.console.history.size": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 10000,
+          "markdownDescription": "Lines kept in the history file. `0` keeps no history. Changes apply when the R console restarts. Left unset, the console's `config.toml` decides.",
+          "order": 20
+        },
+        "betteR.console.history.suggestions": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Fish-style suggestion: the rest of a matching history line in grey after the cursor; Right arrow takes it. Changes apply when the R console restarts. Left unset, the console's `config.toml` decides.",
+          "order": 21
         }
       }
     },

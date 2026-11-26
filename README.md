@@ -161,6 +161,31 @@ All commands are in the Command Palette under **betteR**:
 | `betteR.openConsoleOnStart` | `true` | Open the R terminal when the session starts. |
 | `betteR.arkPath` | *(empty)* | Advanced: use a separate ark build instead of the one inside `better`. |
 
+#### Console settings
+
+The `betteR.console.*` settings change how the R console behaves. They are the console's own settings from its `config.toml` (see the [betteR README](https://github.com/WahiduzzamanKhan/betteR#readme)), so one file can serve both a terminal outside VS Code and VS Code:
+
+- A setting you set in VS Code (user or workspace settings) is passed to the console as `--set key=value` and wins over `config.toml`.
+- A setting you leave unset in VS Code isn't passed, so `config.toml` (or the console's default) decides.
+- The console reads its settings when it starts. Changing one while the console runs shows *Restart the R console to apply.* with a **Restart** button, which restarts the R session and its console.
+
+| Setting | Values | Default | Description |
+|---|---|---|---|
+| `betteR.console.startup.r_home` | path | *(empty)* | R installation to use. Empty: `$R_HOME`, else `R RHOME`. Passed to the R kernel; ignored when `betteR.arkPath` is set. |
+| `betteR.console.startup.banner` | `true`, `false` | `true` | The R version / ark / key-hint lines at startup. |
+| `betteR.console.startup.inline_plots` | `auto`, `iterm`, `kitty`, `sixel`, `none` | `auto` | How plots are drawn in the terminal. `auto` detects the terminal. |
+| `betteR.console.completion.lsp` | `true`, `false` | `true` | Completions from ark's language server. |
+| `betteR.console.completion.popup` | `typing`, `tab` | `typing` | Show suggestions as you type, or only when Tab is pressed. |
+| `betteR.console.completion.min_chars` | 0–10 | `1` | Only with `popup` = `typing`: name characters typed before suggestions show. After `$`, `@` or `::` they always show. |
+| `betteR.console.completion.delay_ms` | 0–2000 | `0` | Only with `popup` = `typing`: how long typing must pause before suggestions show. Each key press restarts the wait. |
+| `betteR.console.completion.accept` | `tab`, `enter` | `tab` | Key that takes the highlighted suggestion. With `enter`, Enter takes it when the menu is open and runs the line when it isn't; Tab still opens the menu and moves to the next item. |
+| `betteR.console.completion.max_height` | 1–50 | `5` | Rows in the completion menu. |
+| `betteR.console.editing.shift_enter` | `auto`, `on`, `off` | `auto` | Whether Shift+Enter inserts a newline. Alt+Enter always does. |
+| `betteR.console.history.size` | 0 or more | `10000` | Lines kept in the history file. `0` keeps no history. |
+| `betteR.console.history.suggestions` | `true`, `false` | `true` | The rest of a matching history line in grey after the cursor; Right arrow takes it. |
+
+The console's `startup.ark` setting has no VS Code setting: in VS Code, `betteR.arkPath` decides which kernel runs.
+
 ## Troubleshooting
 
 - **"Could not find `better`"**: install the console and make sure `better --version` works in a terminal. VS Code reads `PATH` when it starts, so after installing `better` or changing `PATH`, quit VS Code completely (all windows) and start it again. If VS Code was started from the Dock and doesn't see your shell's `PATH`, set `betteR.consolePath` to the full path, for example `~/.cargo/bin/better`. On Windows, the install script and `cargo install` both put it in `%USERPROFILE%\.cargo\bin\better.exe`; only `better.exe` is used, not a `better.cmd` or `.bat` wrapper.
