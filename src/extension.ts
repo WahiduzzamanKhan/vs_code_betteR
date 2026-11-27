@@ -157,6 +157,29 @@ export function activate(context: vscode.ExtensionContext): BetteRApi {
         }),
     );
 
+    // The console reads its settings when it starts (and the kernel
+    // startup.r_home), so a change needs a restart.
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeConfiguration(async (e) => {
+            if (!e.affectsConfiguration('betteR.console')) {
+                return;
+            }
+            const s = active;
+            const consoleRunning = s?.isRunning && s.terminal !== undefined && s.terminal.exitStatus === undefined;
+            const kernelSetting = s?.isRunning && e.affectsConfiguration('betteR.console.startup.r_home');
+            if (!consoleRunning && !kernelSetting) {
+                return;
+            }
+            const choice = await vscode.window.showInformationMessage('Restart the R console to apply.', 'Restart');
+            if (choice === 'Restart') {
+                await vscode.commands.executeCommand('betteR.restart');
+                if (consoleRunning) {
+                    (await session()).openConsole();
+                }
+            }
+        }),
+    );
+
     void start();
     return { ready: () => session(), environment: explorer };
 }
