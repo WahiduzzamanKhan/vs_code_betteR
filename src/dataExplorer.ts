@@ -68,6 +68,52 @@ const FORMAT_OPTIONS = {
 const GLOBAL_SEARCH_ID = 'betteR-global-search';
 
 /**
+ * The tallest canvas the grid scrolls, in px. Chromium clamps layout sizes at
+ * about 33.5M px, so a canvas of rows × row height stops near 1.5M rows. A
+ * taller table scrolls a canvas of this height instead, with the scroll
+ * position mapped to rows by ratio.
+ */
+const MAX_SCROLL_HEIGHT = 10_000_000;
+
+// The grid's geometry. Plain functions, so tests can call them; the webview
+// script includes their source.
+
+/** Row height in px for the editor font size: 22 at the usual 12-14px, taller for larger fonts. */
+export function rowHeight(fontSize: number): number {
+    return Math.max(22, Math.round(fontSize * 1.6) || 0);
+}
+
+/** Height of the canvas the rows scroll in: the rows' full height, up to MAX_SCROLL_HEIGHT. */
+export function canvasRowsHeight(rowsHeight: number): number {
+    return Math.min(rowsHeight, MAX_SCROLL_HEIGHT);
+}
+
+/**
+ * How far down the full table (`rowsHeight` px tall) the viewport starts, at
+ * scroll position `scrollTop` of `maxScroll`. `view` is the height of the
+ * rows' viewport. One to one while the table fits the canvas; otherwise the
+ * ends of the scroll range map to the first and last rows. The last scroll
+ * pixel counts as the end, since a fractional device pixel ratio can stop
+ * the scrollbar just short of `maxScroll`.
+ */
+export function rowsTop(scrollTop: number, maxScroll: number, rowsHeight: number, view: number): number {
+    if (rowsHeight <= MAX_SCROLL_HEIGHT || maxScroll <= 0) {
+        return scrollTop;
+    }
+    const end = Math.max(0, rowsHeight - view);
+    return scrollTop >= maxScroll - 1 ? end : (Math.max(scrollTop, 0) / maxScroll) * end;
+}
+
+/** The scroll position at which the viewport starts `top` px down the full table: the inverse of rowsTop. */
+export function scrollTopFor(top: number, maxScroll: number, rowsHeight: number, view: number): number {
+    if (rowsHeight <= MAX_SCROLL_HEIGHT || maxScroll <= 0) {
+        return top;
+    }
+    const range = rowsHeight - view;
+    return range > 0 ? (Math.min(Math.max(top, 0), range) / range) * maxScroll : 0;
+}
+
+/**
  * One data frame in an editor tab. ark's data explorer comm holds the table
  * (sorted and filtered on ark's side) and serves cell values a block at a
  * time, so tables of any size scroll smoothly. Opened by `View(df)` or the
@@ -245,6 +291,15 @@ export class DataExplorerPanel {
         );
     }
 
+    /**
+     * Acts on the grid as the user would (for tests): presses a key (`mod`:
+     * Ctrl/Cmd), turns the wheel by `wheel` px, or drags the scrollbar to a
+     * fraction `scroll` of its range.
+     */
+    simulate(input: { key: string; mod?: boolean } | { wheel: number } | { scroll: number }): void {
+        this.post({ type: 'simulate', ...input });
+    }
+
     /** ark's change notifications: the variable was reassigned or modified. */
     onEvent(method: string): void {
         if (method === 'schema_update') {
@@ -405,8 +460,9 @@ function html(): string {
   .chip.invalid { background: var(--vscode-inputValidation-errorBackground); outline: 1px solid var(--vscode-inputValidation-errorBorder); color: inherit; }
   .chip button { padding: 0 4px; border-radius: 8px; }
   #grid { flex: 1; overflow: auto; position: relative; outline: none; }
-  #canvas { position: relative; }
-  .c, .h, .l, #corner { position: absolute; box-sizing: border-box; height: ${22}px; line-height: ${22 - 1}px; padding: 0 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  /* Rows near the end of a tall table are placed past the canvas's bottom edge (see rowsTop()); clipping them keeps the scroll range fixed. */
+  #canvas { position: relative; overflow-y: clip; }
+  .c, .h, .l, #corner { position: absolute; box-sizing: border-box; height: var(--row-h, 22px); line-height: calc(var(--row-h, 22px) - 1px); padding: 0 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
     border-right: 1px solid var(--vscode-panel-border); border-bottom: 1px solid var(--vscode-panel-border); font-family: var(--vscode-editor-font-family); font-size: var(--vscode-editor-font-size); }
   .c.n { text-align: right; font-variant-numeric: tabular-nums; }
   .c.s { color: var(--vscode-descriptionForeground); font-style: italic; }
@@ -432,7 +488,7 @@ function html(): string {
     background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border)); border-radius: 4px; box-shadow: 0 2px 8px var(--vscode-widget-shadow); }
   #popover .row { display: flex; gap: 6px; justify-content: flex-end; }
   #popover button.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
-  .probe { position: absolute; visibility: hidden; }
+  .probe { position: absolute; visibility: hidden; height: auto; line-height: normal; }
 </style></head>
 <body>
   <div class="bar">
@@ -454,10 +510,15 @@ function html(): string {
     <input id="fV2" placeholder="and">
     <div class="row"><button id="fCancel">Cancel</button><button id="fApply" class="primary">Apply</button></div>
   </div>
-  <div class="c probe" id="probe"></div>
+  <div class="c probe" id="probe">0</div>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
-  const ROW_H = 22, HEAD_H = 40, BR = 100, BC = 20;
+  const HEAD_H = 40, BR = 100, BC = 20, MAX_SCROLL_HEIGHT = ${MAX_SCROLL_HEIGHT};
+  let ROW_H = 22;
+  ${rowHeight}
+  ${canvasRowsHeight}
+  ${rowsTop}
+  ${scrollTopFor}
   const $ = (id) => document.getElementById(id);
   const grid = $('grid'), canvas = $('canvas'), cellsEl = $('cells'), headerEl = $('header'), labelsEl = $('labels'), corner = $('corner');
   const SPECIAL = { 0: 'NULL', 1: 'NA', 2: 'NaN', 10: 'Inf', 11: '-Inf' };
@@ -487,10 +548,40 @@ function html(): string {
   };
 
   function layout() {
+    const h = rowHeight(parseFloat(getComputedStyle($('probe')).fontSize));
+    if (h !== ROW_H) {
+      ROW_H = h;
+      pinned = null;
+      document.body.style.setProperty('--row-h', h + 'px');
+    }
     xs = [0];
     for (const w of widths) xs.push(xs[xs.length - 1] + w);
     canvas.style.width = labelW + xs[xs.length - 1] + 'px';
-    canvas.style.height = HEAD_H + (st ? st.numRows : 0) * ROW_H + 'px';
+    canvas.style.height = HEAD_H + canvasRowsHeight(rowsHeight()) + 'px';
+  }
+
+  // Scrolling. A table taller than MAX_SCROLL_HEIGHT scrolls a canvas of that
+  // height, so each scroll pixel spans several px of rows: rowsTop() maps the
+  // scroll position to rows, and rows are placed relative to the viewport.
+  const rowsHeight = () => (st ? st.numRows : 0) * ROW_H;
+  const viewHeight = () => Math.max(0, grid.clientHeight - HEAD_H);
+  // Where scrollRowsTo() last scrolled, with the exact offset into the rows it
+  // asked for: in a tall table the scroll position alone can't say which row
+  // is at the top, so a key press would otherwise land a row off.
+  let pinned = null;
+  // How far down the rows (rowsHeight() px tall) the viewport starts.
+  function rowsOffset() {
+    const total = rowsHeight(), view = viewHeight();
+    if (pinned && pinned.scroll === grid.scrollTop && total > MAX_SCROLL_HEIGHT) return Math.min(pinned.top, Math.max(0, total - view));
+    pinned = null;
+    return rowsTop(grid.scrollTop, grid.scrollHeight - grid.clientHeight, total, view);
+  }
+  // Scrolls so the viewport starts top px down the rows.
+  function scrollRowsTo(top) {
+    const total = rowsHeight(), view = viewHeight();
+    top = Math.max(0, Math.min(top, total - view));
+    grid.scrollTop = scrollTopFor(top, grid.scrollHeight - grid.clientHeight, total, view);
+    pinned = total > MAX_SCROLL_HEIGHT ? { scroll: grid.scrollTop, top } : null;
   }
 
   function colAt(x) {
@@ -540,7 +631,7 @@ function html(): string {
   }
 
   function render() {
-    const sl = grid.scrollLeft, stp = grid.scrollTop;
+    const sl = grid.scrollLeft, stp = grid.scrollTop, offset = rowsOffset();
     headerEl.style.top = stp + 'px';
     labelsEl.style.left = sl + 'px';
     corner.style.left = sl + 'px';
@@ -549,8 +640,8 @@ function html(): string {
     if (!st || !st.numCols) { cellsEl.innerHTML = headerEl.innerHTML = labelsEl.innerHTML = ''; return; }
     const c0 = colAt(sl), c1 = colAt(sl + grid.clientWidth - labelW);
     const hasRows = st.numRows > 0;
-    const r0 = Math.min(Math.max(0, Math.floor(stp / ROW_H)), Math.max(0, st.numRows - 1));
-    const r1 = Math.min(st.numRows - 1, Math.floor((stp + grid.clientHeight - HEAD_H) / ROW_H) + 1);
+    const r0 = Math.min(Math.max(0, Math.floor(offset / ROW_H)), Math.max(0, st.numRows - 1));
+    const r1 = Math.min(st.numRows - 1, Math.floor((offset + grid.clientHeight - HEAD_H) / ROW_H) + 1);
     if (hasRows) request(r0, r1, c0, c1);
     const sel = range();
     const keys = st.sortKeys;
@@ -566,8 +657,11 @@ function html(): string {
     }
     headerEl.innerHTML = h;
     let cells = '', ls = '', count = 0;
+    // Rows sit relative to the viewport: offset is where it starts in the rows,
+    // stp where it is on the canvas (the same, unless the table is tall).
+    const dy = HEAD_H + (stp - offset);
     for (let r = hasRows ? r0 : 0; hasRows && r <= r1; r++) {
-      const top = HEAD_H + r * ROW_H;
+      const top = dy + r * ROW_H;
       const rowSel = sel && r >= sel.r0 && r <= sel.r1;
       ls += '<div class="l' + (rowSel && (selKind === 'rows' || selKind === 'all') ? ' sel' : '') + '" data-r="' + r + '" style="top:' + top + 'px;width:' + labelW + 'px" title="' + esc(rowLabel(r)) + '">' + esc(rowLabel(r)) + '</div>';
       for (let c = c0; c <= c1; c++) {
@@ -603,6 +697,21 @@ function html(): string {
   // values undrawn. Messages and scroll events still arrive promptly.
   grid.addEventListener('scroll', render);
   new ResizeObserver(render).observe(grid);
+  // The probe's height follows the editor font size, which sets ROW_H.
+  new ResizeObserver(() => { layout(); render(); }).observe($('probe'));
+
+  // In a tall table one scroll pixel spans several px of rows, so the wheel
+  // would race through them: move through the rows directly instead, at the
+  // wheel's usual speed. Shift+wheel scrolls sideways, as before.
+  grid.addEventListener('wheel', (e) => {
+    if (!st || rowsHeight() <= MAX_SCROLL_HEIGHT || e.ctrlKey || e.shiftKey || !e.deltaY) return;
+    e.preventDefault();
+    const unit = e.deltaMode === 1 ? ROW_H : e.deltaMode === 2 ? viewHeight() : 1;
+    const before = grid.scrollTop;
+    grid.scrollLeft += e.deltaX * unit;
+    scrollRowsTo(rowsOffset() + e.deltaY * unit);
+    if (grid.scrollTop === before) render();
+  }, { passive: false });
 
   function autoFit(cb, values) {
     let changed = false;
@@ -756,7 +865,7 @@ function html(): string {
     const rect = grid.getBoundingClientRect();
     const x = e.clientX - rect.left, y = e.clientY - rect.top;
     if (x > grid.clientWidth || y > grid.clientHeight) return null;
-    const r = Math.floor((y + grid.scrollTop - HEAD_H) / ROW_H), c = colAt(x + grid.scrollLeft - labelW);
+    const r = Math.floor((y - HEAD_H + rowsOffset()) / ROW_H), c = colAt(x + grid.scrollLeft - labelW);
     return { r: Math.max(0, Math.min(st.numRows - 1, r)), c: Math.max(0, Math.min(st.numCols - 1, c)), header: y < HEAD_H, label: x < labelW };
   }
 
@@ -808,9 +917,9 @@ function html(): string {
   window.addEventListener('mouseup', () => { dragging = null; });
 
   function reveal(r, c) {
-    const top = HEAD_H + r * ROW_H, left = labelW + xs[c];
-    if (top - HEAD_H < grid.scrollTop) grid.scrollTop = top - HEAD_H;
-    else if (top + ROW_H > grid.scrollTop + grid.clientHeight) grid.scrollTop = top + ROW_H - grid.clientHeight;
+    const top = r * ROW_H, offset = rowsOffset(), left = labelW + xs[c];
+    if (top < offset) scrollRowsTo(top);
+    else if (top + ROW_H > offset + viewHeight()) scrollRowsTo(top + ROW_H - viewHeight());
     if (left - labelW < grid.scrollLeft) grid.scrollLeft = left - labelW;
     else if (left + widths[c] > grid.scrollLeft + grid.clientWidth) grid.scrollLeft = left + widths[c] - grid.clientWidth;
   }
@@ -866,6 +975,11 @@ function html(): string {
       case 'error':
         $('overlay').hidden = false;
         $('overlay').textContent = data.message;
+        break;
+      case 'simulate':
+        if (data.key) grid.dispatchEvent(new KeyboardEvent('keydown', { key: data.key, ctrlKey: !!data.mod }));
+        else if (data.wheel !== undefined) grid.dispatchEvent(new WheelEvent('wheel', { deltaY: data.wheel, cancelable: true }));
+        else grid.scrollTop = data.scroll * (grid.scrollHeight - grid.clientHeight);
         break;
     }
   });

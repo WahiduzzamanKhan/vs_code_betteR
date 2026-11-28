@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import type { BetteRApi } from '../../extension';
-import type { DataExplorerPanel } from '../../dataExplorer';
+import { canvasRowsHeight, rowHeight, rowsTop, scrollTopFor, type DataExplorerPanel } from '../../dataExplorer';
 import type { EnvironmentExplorer, EnvNode } from '../../environment';
 import type { Session } from '../../session';
 
@@ -127,9 +127,96 @@ suite('betteR data explorer: data frames in an editor tab', () => {
         assert.deepStrictEqual(await env!.rowLabels(0, 0), ['Mazda RX4']);
     });
 
+    test('a table taller than the browser can lay out scrolls to its last row', async () => {
+        // 2M rows of 22px is past Chromium's ~33.5M px layout limit, which
+        // stopped a canvas of rows × row height near row 1.5M.
+        const rows = 2_000_000;
+        session.execute(`de_big <- data.frame(i = seq_len(${rows}))`);
+        session.execute('View(de_big)');
+        const big = (await waitFor('a de_big tab', () => session.dataExplorers.byTitle('de_big'), (p) => !!p?.state))!;
+        assert.strictEqual(big.state!.table_shape.num_rows, rows);
+        // One column, so the grid draws one cell per row: rows `row` to
+        // `row + cells - 1`, with the value of the top one.
+        const drawn = (what: string, ok: (top: number, bottom: number) => boolean) =>
+            waitFor(what, () => big.lastRender, (r) => !!r && r.text === String(r.row + 1) && ok(r.row, r.row + r.cells - 1), 10_000);
+        await drawn('the first rows', (top) => top === 0);
+
+        // The scrollbar dragged to the end, and Ctrl+End, show the last row.
+        big.simulate({ scroll: 1 });
+        await drawn('the last row, scrolled to', (_, bottom) => bottom === rows - 1);
+        big.simulate({ key: 'Home', mod: true });
+        await drawn('the first row again', (top) => top === 0);
+        big.simulate({ key: 'End', mod: true });
+        const end = (await drawn('the last row, from Ctrl+End', (_, bottom) => bottom === rows - 1))!;
+
+        // The arrow keys move up one row at a time even here, where each
+        // scroll pixel spans several rows: up past the top row scrolls by one.
+        for (let i = 0; i < end.cells; i++) {
+            big.simulate({ key: 'ArrowUp' });
+        }
+        await drawn('one row above the top row', (top) => top === end.row - 1);
+        big.simulate({ key: 'ArrowUp' });
+        await drawn('another row up', (top) => top === end.row - 2);
+
+        // The wheel scrolls at its usual speed, not one scroll pixel's worth of rows per pixel.
+        big.simulate({ key: 'Home', mod: true });
+        await drawn('the first row again', (top) => top === 0);
+        big.simulate({ wheel: 220 });
+        await drawn('a few rows down', (top) => top > 0 && top <= 10);
+
+        big.dispose();
+        session.execute('rm(de_big)');
+    });
+
     test('removing the variable marks the tab as closed', async () => {
         session.execute('rm(de_df)');
         await waitFor('de_df explorer closed', () => panel.closed, (c) => !!c);
         await assert.rejects(panel.values(0, 0, 0, 0), /no longer available/);
+    });
+});
+
+suite('Data explorer: grid geometry', () => {
+    /** Height of the rows' viewport, below the header. */
+    const view = 600;
+
+    test('a table that fits the canvas scrolls one pixel per pixel, as before', () => {
+        for (const height of [250 * 22, 10_000_000]) {
+            const maxScroll = height - view;
+            assert.strictEqual(canvasRowsHeight(height), height);
+            for (const y of [0, 1, 1234.5, maxScroll]) {
+                assert.strictEqual(rowsTop(y, maxScroll, height, view), y);
+                assert.strictEqual(scrollTopFor(y, maxScroll, height, view), y);
+            }
+        }
+    });
+
+    test('a taller table scrolls a canvas Chromium can lay out, whose ends reach the first and last rows', () => {
+        for (const rows of [2e6, 1e9]) {
+            const height = rows * 22;
+            const canvas = canvasRowsHeight(height);
+            // Chromium clamps layout sizes at 2^31 / 64 px (its LayoutUnit is a fixed-point int).
+            assert.ok(canvas + 40 < 2 ** 31 / 64, `canvas of ${canvas}px for ${rows} rows`);
+            const maxScroll = canvas - view;
+            assert.strictEqual(rowsTop(0, maxScroll, height, view), 0);
+            assert.strictEqual(rowsTop(maxScroll, maxScroll, height, view), height - view, 'the last row at the bottom');
+            assert.strictEqual(rowsTop(maxScroll - 0.5, maxScroll, height, view), height - view, 'the end, a fraction of a pixel short');
+            assert.strictEqual(rowsTop(maxScroll + 50, maxScroll, height, view), height - view);
+            assert.strictEqual(scrollTopFor(0, maxScroll, height, view), 0);
+            assert.strictEqual(scrollTopFor(height - view, maxScroll, height, view), maxScroll);
+            assert.strictEqual(scrollTopFor(height, maxScroll, height, view), maxScroll);
+            let last = 0;
+            for (const y of [1, maxScroll / 3, maxScroll / 2, maxScroll - 2]) {
+                const top = rowsTop(y, maxScroll, height, view);
+                assert.ok(top > last, 'further down the scroll range is further down the table');
+                assert.ok(Math.abs(scrollTopFor(top, maxScroll, height, view) - y) < 1e-6);
+                last = top;
+            }
+        }
+    });
+
+    test('rows are 22px at the usual font sizes and grow with larger ones', () => {
+        assert.deepStrictEqual([8, 12, 13, 14].map(rowHeight), [22, 22, 22, 22]);
+        assert.strictEqual(rowHeight(20), 32);
+        assert.ok(rowHeight(30) >= 30 * 1.5);
     });
 });
