@@ -270,77 +270,100 @@ export class Session implements vscode.Disposable {
         await checkConsoleVersion(consolePath, (line) => output.appendLine(line));
 
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'better-vscode-'));
-        const connectionFile = path.join(dir, 'kernel.json');
-        const logFile = path.join(dir, 'ark.log');
-        const info = {
-            shell_port: await freePort(),
-            iopub_port: await freePort(),
-            stdin_port: await freePort(),
-            control_port: await freePort(),
-            hb_port: await freePort(),
-            ip: '127.0.0.1',
-            key: crypto.randomBytes(16).toString('hex'),
-            transport: 'tcp',
-            signature_scheme: 'hmac-sha256',
-            kernel_name: 'ark',
-        };
-        // The connection file holds the HMAC key: owner-only.
-        fs.writeFileSync(connectionFile, JSON.stringify(info, null, 2), { mode: 0o600 });
-        const ide = await IdeChannel.listen();
-        const htmlServer = await HtmlServer.start();
+        // What a failed start has to undo, until a Session owns it.
+        let ide: IdeChannel | undefined;
+        let htmlServer: HtmlServer | undefined;
+        let session: Session | undefined;
+        try {
+            const connectionFile = path.join(dir, 'kernel.json');
+            const logFile = path.join(dir, 'ark.log');
+            const info = {
+                shell_port: await freePort(),
+                iopub_port: await freePort(),
+                stdin_port: await freePort(),
+                control_port: await freePort(),
+                hb_port: await freePort(),
+                ip: '127.0.0.1',
+                key: crypto.randomBytes(16).toString('hex'),
+                transport: 'tcp',
+                signature_scheme: 'hmac-sha256',
+                kernel_name: 'ark',
+            };
+            // The connection file holds the HMAC key: owner-only.
+            fs.writeFileSync(connectionFile, JSON.stringify(info, null, 2), { mode: 0o600 });
+            ide = await IdeChannel.listen();
+            htmlServer = await HtmlServer.start();
 
-        const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        // The kernel's half of the `betteR.console.*` settings (startup.r_home).
-        const kernelSettings = kernelSetArgs(userConsoleSettings(), Boolean(arkOverride));
-        output.appendLine(`Starting R kernel: ${[kernelCommand, ...kernelArgs, ...kernelSettings].join(' ')}`);
-        output.appendLine(`Connection file: ${connectionFile}`);
-        const kernel = cp.spawn(
-            kernelCommand,
-            // `--set` last: `--kernel` has to come first, and the tests find
-            // kernels by `--kernel --connection_file` (runTest.ts).
-            [
-                ...kernelArgs,
-                '--connection_file',
-                connectionFile,
-                '--session-mode',
-                'console',
-                '--log',
-                logFile,
-                ...kernelSettings,
-            ],
-            { cwd: cwd ?? os.homedir(), stdio: 'ignore' },
-        );
+            const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            // The kernel's half of the `betteR.console.*` settings (startup.r_home).
+            const kernelSettings = kernelSetArgs(userConsoleSettings(), Boolean(arkOverride));
+            output.appendLine(`Starting R kernel: ${[kernelCommand, ...kernelArgs, ...kernelSettings].join(' ')}`);
+            output.appendLine(`Connection file: ${connectionFile}`);
+            const kernel = cp.spawn(
+                kernelCommand,
+                // `--set` last: `--kernel` has to come first, and the tests find
+                // kernels by `--kernel --connection_file` (runTest.ts).
+                [
+                    ...kernelArgs,
+                    '--connection_file',
+                    connectionFile,
+                    '--session-mode',
+                    'console',
+                    '--log',
+                    logFile,
+                    ...kernelSettings,
+                ],
+                { cwd: cwd ?? os.homedir(), stdio: 'ignore' },
+            );
 
-        const serverOptions: ServerOptions = {
-            command: consolePath,
-            args: ['--lsp-stdio', '--connection-file', connectionFile],
-            options: { cwd },
-        };
-        const clientOptions: LanguageClientOptions = {
-            documentSelector: [
-                { scheme: 'file', language: 'r' },
-                { scheme: 'untitled', language: 'r' },
-            ],
-            outputChannel: output,
-            middleware: {
-                // Half-typed console input isn't worth a Problems entry.
-                handleDiagnostics: (uri, diagnostics, next) =>
-                    next(uri, uri.toString() === CONSOLE_DOC_URI ? [] : diagnostics),
-            },
-        };
-        const client = new LanguageClient('betteR', 'betteR (ark)', serverOptions, clientOptions);
-        const session = new Session(kernel, connectionFile, logFile, dir, consolePath, cwd, client, ide, htmlServer, output);
+            const serverOptions: ServerOptions = {
+                command: consolePath,
+                args: ['--lsp-stdio', '--connection-file', connectionFile],
+                options: { cwd },
+            };
+            const clientOptions: LanguageClientOptions = {
+                documentSelector: [
+                    { scheme: 'file', language: 'r' },
+                    { scheme: 'untitled', language: 'r' },
+                ],
+                outputChannel: output,
+                middleware: {
+                    // Half-typed console input isn't worth a Problems entry.
+                    handleDiagnostics: (uri, diagnostics, next) =>
+                        next(uri, uri.toString() === CONSOLE_DOC_URI ? [] : diagnostics),
+                },
+            };
+            const client = new LanguageClient('betteR', 'betteR (ark)', serverOptions, clientOptions);
+            session = new Session(kernel, connectionFile, logFile, dir, consolePath, cwd, client, ide, htmlServer, output);
+            const started = session;
 
-        kernel.on('exit', (code, signal) => {
-            output.appendLine(`ark exited (code ${code}, signal ${signal})`);
-            if (!session.disposed) {
-                onUnexpectedExit(session);
+            kernel.on('exit', (code, signal) => {
+                output.appendLine(`ark exited (code ${code}, signal ${signal})`);
+                if (!started.disposed) {
+                    onUnexpectedExit(started);
+                }
+            });
+            // A kernel that can't be run (missing, not executable, a
+            // directory) emits `error`, not `exit`.
+            await new Promise<void>((resolve, reject) => {
+                kernel.once('spawn', resolve);
+                kernel.once('error', (err) => reject(new Error(`Couldn't start the R kernel ${kernelCommand}: ${err.message}`)));
+            });
+            kernel.on('error', (err) => output.appendLine(`ark: ${err.message}`));
+
+            await client.start();
+            output.appendLine('Language client connected to ark.');
+            return session;
+        } catch (err) {
+            if (session) {
+                await session.dispose();
+            } else {
+                ide?.dispose();
+                htmlServer?.dispose();
+                fs.rmSync(dir, { recursive: true, force: true });
             }
-        });
-
-        await client.start();
-        output.appendLine('Language client connected to ark.');
-        return session;
+            throw err;
+        }
     }
 
     /** Why the kernel stopped, from its log, if it says. */
@@ -349,7 +372,8 @@ export class Session implements vscode.Disposable {
     }
 
     get isRunning(): boolean {
-        return this.kernel.exitCode === null && this.kernel.signalCode === null;
+        // A kernel that failed to spawn has no pid and never exits.
+        return this.kernel.pid !== undefined && this.kernel.exitCode === null && this.kernel.signalCode === null;
     }
 
     private onIdeMessage(msg: IdeMessage): void {
@@ -793,12 +817,17 @@ export class Session implements vscode.Disposable {
             this.kernel.kill('SIGKILL');
         }
         process.off('exit', this.killOnHostExit);
-        if (crashed) {
-            // Kernel died on its own: keep its log for diagnosis.
-            fs.rmSync(this.connectionFile, { force: true });
-            this.output.appendLine(`ark log kept at ${this.logFile}`);
-        } else {
-            fs.rmSync(this.dir, { recursive: true, force: true });
+        try {
+            if (crashed && fs.existsSync(this.logFile)) {
+                // Kernel died on its own: keep its log for diagnosis.
+                fs.rmSync(this.connectionFile, { force: true });
+                this.output.appendLine(`ark log kept at ${this.logFile}`);
+            } else {
+                fs.rmSync(this.dir, { recursive: true, force: true, maxRetries: 3 });
+            }
+        } catch (err) {
+            // Restart goes on: the next session uses a new directory.
+            this.output.appendLine(`Couldn't remove ${this.dir}: ${(err as Error).message}`);
         }
     }
 }

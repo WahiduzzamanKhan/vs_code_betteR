@@ -11,6 +11,11 @@ export interface BetteRApi {
     environment: EnvironmentExplorer;
 }
 
+/**
+ * The latest start, or restart (stop, then start). Only ever replaced by the
+ * next one, which awaits it first, so starts never overlap and no session is
+ * left running unseen.
+ */
 let current: Promise<Session> | undefined;
 /** The started session, for synchronous callers (debug adapter, documents). */
 let active: Session | undefined;
@@ -29,6 +34,9 @@ export function activate(context: vscode.ExtensionContext): BetteRApi {
     };
 
     const onUnexpectedExit = (session: Session) => {
+        if (active === session) {
+            active = undefined;
+        }
         const reason = session.exitReason();
         setStatus('$(debug-disconnect) R', reason ? `R session ended: ${reason}` : 'R session ended');
         explorer.attach(undefined);
@@ -41,6 +49,7 @@ export function activate(context: vscode.ExtensionContext): BetteRApi {
         void session.dispose();
     };
 
+    /** Starts a session, showing how it went; the promise rejects if it failed. */
     const start = (): Promise<Session> => {
         setStatus('$(loading~spin) R', 'Starting R session…');
         const starting = Session.start(context, output, onUnexpectedExit);
@@ -64,45 +73,79 @@ export function activate(context: vscode.ExtensionContext): BetteRApi {
                 }
             },
         );
-        current = starting;
         return starting;
     };
 
-    const session = async (): Promise<Session> => {
-        const s = await (current ?? start());
-        return s.isRunning ? s : start();
+    /** Stops the session, if any, then starts a new one. */
+    const restart = (): Promise<Session> => {
+        const previous = current;
+        active = undefined;
+        explorer.attach(undefined);
+        current = (async () => {
+            await (await previous?.catch(() => undefined))?.dispose();
+            return start();
+        })();
+        return current;
     };
 
+    /**
+     * The running session. Starts one if the last start failed or R has
+     * died, unless another caller already has: then that start is this one's.
+     */
+    const session = async (): Promise<Session> => {
+        const latest = current;
+        const s = await latest?.catch(() => undefined);
+        if (s?.isRunning) {
+            return s;
+        }
+        return current === latest ? restart() : current!;
+    };
+
+    /**
+     * A command that needs the session. A failed start was already shown
+     * (status bar, notification), so it isn't reported again as the command
+     * failing.
+     */
+    const withSession =
+        <A extends unknown[]>(run: (s: Session, ...args: A) => unknown) =>
+        async (...args: A) => {
+            const s = await session().catch(() => undefined);
+            return s && run(s, ...args);
+        };
+
     context.subscriptions.push(
-        vscode.commands.registerCommand('betteR.openConsole', async () => (await session()).openConsole()),
-        vscode.commands.registerCommand('betteR.showPlots', async () => (await session()).plots.show()),
-        vscode.commands.registerCommand('betteR.helpAtCursor', async () => {
-            const editor = vscode.window.activeTextEditor;
-            if (!editor) {
-                return;
-            }
-            const word = editor.document.getText(editor.document.getWordRangeAtPosition(editor.selection.active, /[\w.:]+/));
-            const topic = await (await session()).helpAt(editor.document, editor.selection.active);
-            if (!topic) {
-                void vscode.window.showInformationMessage(`No R help found for '${word}'.`);
-            }
-        }),
-        vscode.commands.registerCommand('betteR.clearPlots', async () => (await session()).plots.confirmClear()),
-        vscode.commands.registerCommand('betteR.showViewer', async () => {
-            const s = await session();
-            if (s.viewer.url) {
-                s.viewer.show(s.viewer.url, s.viewer.title);
-            } else {
-                void vscode.window.showInformationMessage('Nothing to view yet. htmlwidgets and Shiny apps from R appear here.');
-            }
-        }),
+        vscode.commands.registerCommand('betteR.openConsole', withSession((s) => s.openConsole())),
+        vscode.commands.registerCommand('betteR.showPlots', withSession((s) => s.plots.show())),
+        vscode.commands.registerCommand(
+            'betteR.helpAtCursor',
+            withSession(async (s) => {
+                const editor = vscode.window.activeTextEditor;
+                if (!editor) {
+                    return;
+                }
+                const word = editor.document.getText(editor.document.getWordRangeAtPosition(editor.selection.active, /[\w.:]+/));
+                const topic = await s.helpAt(editor.document, editor.selection.active);
+                if (!topic) {
+                    void vscode.window.showInformationMessage(`No R help found for '${word}'.`);
+                }
+            }),
+        ),
+        vscode.commands.registerCommand('betteR.clearPlots', withSession((s) => s.plots.confirmClear())),
+        vscode.commands.registerCommand(
+            'betteR.showViewer',
+            withSession((s) => {
+                if (s.viewer.url) {
+                    s.viewer.show(s.viewer.url, s.viewer.title);
+                } else {
+                    void vscode.window.showInformationMessage(
+                        'Nothing to view yet. htmlwidgets and Shiny apps from R appear here.',
+                    );
+                }
+            }),
+        ),
+        // A failed start was already shown; it isn't the command failing.
         vscode.commands.registerCommand('betteR.restart', async () => {
-            const old = current;
-            current = undefined;
-            active = undefined;
-            explorer.attach(undefined);
-            await (await old?.catch(() => undefined))?.dispose();
-            await start();
+            await restart().catch(() => undefined);
         }),
         vscode.commands.registerCommand('betteR.env.refresh', () => explorer.refresh()),
         vscode.commands.registerCommand('betteR.env.clear', () => explorer.clear()),
@@ -118,31 +161,39 @@ export function activate(context: vscode.ExtensionContext): BetteRApi {
                 void vscode.window.showErrorMessage(`betteR: ${(err as Error).message}`);
             }
         }),
-        vscode.commands.registerCommand('betteR.env.print', async (node: EnvNode) => {
-            const expr = node && rExpression(node);
-            if (expr) {
-                (await session()).execute(expr);
-            }
-        }),
-        vscode.commands.registerCommand('betteR.env.str', async (node: EnvNode) => {
-            const expr = node && rExpression(node);
-            if (expr) {
-                (await session()).execute(`str(${expr})`);
-            }
-        }),
+        vscode.commands.registerCommand(
+            'betteR.env.print',
+            withSession((s, node: EnvNode) => {
+                const expr = node && rExpression(node);
+                if (expr) {
+                    s.execute(expr);
+                }
+            }),
+        ),
+        vscode.commands.registerCommand(
+            'betteR.env.str',
+            withSession((s, node: EnvNode) => {
+                const expr = node && rExpression(node);
+                if (expr) {
+                    s.execute(`str(${expr})`);
+                }
+            }),
+        ),
         vscode.commands.registerCommand('betteR.env.copy', async (node: EnvNode) => {
             const text = node && EnvironmentExplorer.copyText(node);
             if (text) {
                 await vscode.env.clipboard.writeText(text);
             }
         }),
-        vscode.commands.registerCommand('betteR.runSelection', async () => {
-            const editor = vscode.window.activeTextEditor;
-            if (!editor) {
-                return;
-            }
-            await (await session()).runSelection(editor);
-        }),
+        vscode.commands.registerCommand(
+            'betteR.runSelection',
+            withSession(async (s) => {
+                const editor = vscode.window.activeTextEditor;
+                if (editor) {
+                    await s.runSelection(editor);
+                }
+            }),
+        ),
         vscode.debug.registerDebugAdapterDescriptorFactory('ark', {
             createDebugAdapterDescriptor: () => {
                 const s = active;
@@ -172,15 +223,16 @@ export function activate(context: vscode.ExtensionContext): BetteRApi {
             }
             const choice = await vscode.window.showInformationMessage('Restart the R console to apply.', 'Restart');
             if (choice === 'Restart') {
-                await vscode.commands.executeCommand('betteR.restart');
+                // A failed start was already shown.
+                const restarted = await restart().catch(() => undefined);
                 if (consoleRunning) {
-                    (await session()).openConsole();
+                    restarted?.openConsole();
                 }
             }
         }),
     );
 
-    void start();
+    current = start();
     return { ready: () => session(), environment: explorer };
 }
 
